@@ -25,7 +25,12 @@
 -
 -
 
-
+### do this after cloning:
+mkdir build
+cd build
+cmake ..
+make
+./ComputerGraphics
 
 ### Contributors:
 - Miskat Mahmud (codedsami) - 40250110
