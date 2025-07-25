@@ -1,4 +1,3 @@
-// include/Model.h
 #pragma once
 
 #include <glad/glad.h> 
@@ -19,9 +18,8 @@
 #include <map>
 #include <vector>
 
-using namespace std;
-
-unsigned int TextureFromFile(const char *path, const string &directory, bool gamma = false);
+// Forward declaration
+unsigned int TextureFromFile(const char *path, const std::string &directory);
 
 struct Vertex {
     glm::vec3 Position;
@@ -31,18 +29,18 @@ struct Vertex {
 
 struct Texture {
     unsigned int id;
-    string type;
-    string path;
+    std::string type;
+    std::string path;
 };
 
 class Mesh {
 public:
-    vector<Vertex>       vertices;
-    vector<unsigned int> indices;
-    vector<Texture>      textures;
+    std::vector<Vertex>       vertices;
+    std::vector<unsigned int> indices;
+    std::vector<Texture>      textures;
     unsigned int VAO;
 
-    Mesh(vector<Vertex> vertices, vector<unsigned int> indices, vector<Texture> textures)
+    Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures)
     {
         this->vertices = vertices;
         this->indices = indices;
@@ -52,17 +50,18 @@ public:
 
     void Draw(Shader &shader) 
     {
-        unsigned int diffuseNr  = 1;
         for(unsigned int i = 0; i < textures.size(); i++)
         {
-            glActiveTexture(GL_TEXTURE0 + i);
-            string name = textures[i].type;
-            if(name == "texture_diffuse")
-                shader.setInt((name + to_string(diffuseNr++)).c_str(), i);
+            if(textures[i].type == "texture_diffuse")
+            {
+                glActiveTexture(GL_TEXTURE0);
+                shader.setInt("texture_diffuse1", 0);
+                glBindTexture(GL_TEXTURE_2D, textures[i].id);
+            }
         }
         
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
         glActiveTexture(GL_TEXTURE0);
     }
@@ -95,11 +94,11 @@ private:
 class Model 
 {
 public:
-    vector<Texture> textures_loaded;
-    vector<Mesh>    meshes;
-    string directory;
+    std::vector<Texture> textures_loaded;
+    std::vector<Mesh>    meshes;
+    std::string directory;
 
-    Model(string const &path)
+    Model(std::string const &path)
     {
         loadModel(path);
     }
@@ -111,13 +110,14 @@ public:
     }
     
 private:
-    void loadModel(string const &path)
+    void loadModel(std::string const &path)
     {
         Assimp::Importer importer;
-        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_FlipUVs);
+        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_GenUVCoords);
+        
         if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) 
         {
-            cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << endl;
+            std::cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << std::endl;
             return;
         }
         directory = path.substr(0, path.find_last_of('/'));
@@ -139,9 +139,9 @@ private:
 
     Mesh processMesh(aiMesh *mesh, const aiScene *scene)
     {
-        vector<Vertex> vertices;
-        vector<unsigned int> indices;
-        vector<Texture> textures;
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        std::vector<Texture> textures;
 
         for(unsigned int i = 0; i < mesh->mNumVertices; i++)
         {
@@ -163,15 +163,15 @@ private:
         }
 
         aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];    
-        vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
+        std::vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
         textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
         
         return Mesh(vertices, indices, textures);
     }
 
-    vector<Texture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, string typeName)
+    std::vector<Texture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName)
     {
-        vector<Texture> textures;
+        std::vector<Texture> textures;
         for(unsigned int i = 0; i < mat->GetTextureCount(type); i++)
         {
             aiString str;
@@ -189,9 +189,18 @@ private:
             if(!skip)
             {
                 Texture texture;
+                // --- START: Added Debug and Fallback Logic ---
+                std::cout << "Loading texture: " << str.C_Str() << " from directory: " << this->directory << std::endl;
                 texture.id = TextureFromFile(str.C_Str(), this->directory);
                 texture.type = typeName;
                 texture.path = str.C_Str();
+                if (texture.id == 0) {
+                    std::cout << "Failed to load texture: " << str.C_Str() << ", trying with 'textures/' prefix" << std::endl;
+                    std::string newPath = std::string("textures/") + std::string(str.C_Str());
+                    texture.id = TextureFromFile(newPath.c_str(), this->directory);
+                    texture.path = newPath;
+                }
+                // --- END: Added Debug and Fallback Logic ---
                 textures.push_back(texture);
                 textures_loaded.push_back(texture);
             }
@@ -200,10 +209,14 @@ private:
     }
 };
 
-unsigned int TextureFromFile(const char *path, const string &directory, bool gamma)
+unsigned int TextureFromFile(const char *path, const std::string &directory)
 {
-    string filename = string(path);
+    std::string filename = std::string(path);
     filename = directory + '/' + filename;
+    
+    // --- START: Added Debug Print ---
+    std::cout << "Attempting to load texture file: " << filename << std::endl;
+    // --- END: Added Debug Print ---
 
     unsigned int textureID;
     glGenTextures(1, &textureID);
@@ -212,7 +225,7 @@ unsigned int TextureFromFile(const char *path, const string &directory, bool gam
     unsigned char *data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
     if (data)
     {
-        GLenum format;
+        GLenum format = GL_RGB;
         if (nrComponents == 1)
             format = GL_RED;
         else if (nrComponents == 3)
@@ -233,8 +246,11 @@ unsigned int TextureFromFile(const char *path, const string &directory, bool gam
     }
     else
     {
+        // --- START: Modified Error Handling ---
         std::cout << "Texture failed to load at path: " << filename << std::endl;
         stbi_image_free(data);
+        textureID = 0; // Return 0 if loading fails
+        // --- END: Modified Error Handling ---
     }
 
     return textureID;
