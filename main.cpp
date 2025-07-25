@@ -5,6 +5,8 @@
 //
 
 #include <iostream>
+#include <cstdlib>  // for rand()
+#include <ctime>    // for time()
 #include <list>
 
 #define GLEW_STATIC 1   // This allows linking with Static Library on Windows, without DLL
@@ -247,7 +249,10 @@ int createVertexBufferObject()
     return vertexBufferObject;
 }
 
+const int GRID_SIZE = 20;
+float towerHeights[GRID_SIZE][GRID_SIZE];
 
+// ─── Main function ───
 int main(int argc, char*argv[])
 {
     // Initialize GLFW and OpenGL version
@@ -322,6 +327,14 @@ int main(int argc, char*argv[])
     
     // Define and upload geometry to the GPU here ...
     int vao = createVertexBufferObject();
+    srand((unsigned int)time(0));  // seed random generator
+    for (int i = 0; i < GRID_SIZE; ++i)
+    {
+        for (int j = 0; j < GRID_SIZE; ++j)
+        {
+            towerHeights[i][j] = 5.0f + static_cast<float>(rand() % 1500) / 100.0f; // 5.0 to 20.0
+        }
+    }
     
     // For frame time
     float lastFrameTime = glfwGetTime();
@@ -386,15 +399,22 @@ int main(int argc, char*argv[])
         glUniformMatrix4fv(worldMatrixLocation, 1, GL_FALSE, &pillarWorldMatrix[0][0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         
-        for (int i=0; i<20; ++i)
+        for (int i = 0; i < GRID_SIZE; ++i)
         {
-            for (int j=0; j<20; ++j)
+            for (int j = 0; j < GRID_SIZE; ++j)
             {
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 5.0f, -100.0f + j * 10.0f)) * scale(mat4(1.0f), vec3(1.0f, 10.0f, 1.0f));
+                float height = towerHeights[i][j];
+
+                // Draw main tower
+                pillarWorldMatrix = translate(mat4(1.0f), vec3(-100.0f + i * 10.0f, height * 0.5f, -100.0f + j * 10.0f)) 
+                                * scale(mat4(1.0f), vec3(1.0f, height, 1.0f));
                 glUniformMatrix4fv(worldMatrixLocation, 1, GL_FALSE, &pillarWorldMatrix[0][0]);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
-                
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 0.55f, -100.0f + j * 10.0f)) * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) * scale(mat4(1.0f), vec3(1.1f, 1.1f, 1.1f));
+
+                // Optional base cube
+                pillarWorldMatrix = translate(mat4(1.0f), vec3(-100.0f + i * 10.0f, 0.55f, -100.0f + j * 10.0f)) 
+                                * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) 
+                                * scale(mat4(1.0f), vec3(1.1f, 1.1f, 1.1f));
                 glUniformMatrix4fv(worldMatrixLocation, 1, GL_FALSE, &pillarWorldMatrix[0][0]);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }
@@ -481,7 +501,7 @@ int main(int argc, char*argv[])
         lastMousePosY = mouseY;
 
         // Update spherical angles (sensitivity ~ 0.5)
-        float sensitivity = 0.1f;
+        float sensitivity = 0.03f;
         cameraHorizontalAngle += dx * sensitivity;
         cameraVerticalAngle   = clamp(cameraVerticalAngle - dy * sensitivity, -85.0f, 85.0f);
 
