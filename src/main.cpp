@@ -20,11 +20,11 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow *window);
 
 // Window dimensions
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
+const unsigned int SCR_WIDTH = 1280;
+const unsigned int SCR_HEIGHT = 720;
 
-// Camera - Adjusted for a smaller model
-Camera camera(glm::vec3(0.0f, 2.0f, 10.0f));
+// Camera - Adjusted for a better view of the scene
+Camera camera(glm::vec3(0.0f, 4.0f, 18.0f));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -56,7 +56,7 @@ int main() {
 #endif
 
     // Create the GLFW window
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Pier Model", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "City Scene", NULL, NULL);
     if (window == NULL) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -79,17 +79,17 @@ int main() {
     
     // Configure global OpenGL state
     glEnable(GL_DEPTH_TEST);
-    // glFrontFace(GL_CW); // Commented out - most models use default CCW
     glEnable(GL_CULL_FACE);
 
     // Build and compile our shaders
     Shader ourShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
 
-    // --- UPDATED: Load the new pier model ---
-    Model ourModel("../src/Models/pier.obj");
+    // Load both models
+    Model pierModel("../src/Models/pier.obj");
+    Model planeModel("../src/Models/plane/plane.glb");
     
     // Define a light source position in world space
-    glm::vec3 lightPos(0.0f, 10.0f, 10.0f);
+    glm::vec3 lightPos(5.0f, 20.0f, 15.0f);
 
     // Main Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -105,25 +105,39 @@ int main() {
         glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Activate shader and set uniforms
+        // Activate shader
         ourShader.use();
+
+        // Set uniforms that are the same for all objects
         ourShader.setVec3("lightPos", lightPos);
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
 
-        // Set up camera and projection matrices
+        // Set view/projection matrices (same for all objects)
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
 
-        // --- UPDATED: Set up the model matrix with no scaling ---
-        glm::mat4 model = glm::mat4(1.0f);
-        // model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f)); // No scaling needed for now
-        ourShader.setMat4("model", model);
         
-        // Draw the model
-        ourModel.Draw(ourShader);
+        // --- Draw the Pier ---
+        glm::mat4 modelMatrix = glm::mat4(1.0f);
+        modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -2.0f, 0.0f)); 
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(2.0f, 2.0f, 2.0f));     
+        ourShader.setMat4("model", modelMatrix);
+        pierModel.Draw(ourShader);
+
+
+        // --- Draw the animated Plane ---
+        modelMatrix = glm::mat4(1.0f);
+        float y_offset = 0.5f * sin(2.0f * (float)glfwGetTime());
+        modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 2.0f + y_offset, 0.0f));
+        modelMatrix = glm::rotate(modelMatrix, glm::radians(-45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        // --- UPDATED: Made the plane much smaller ---
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f)); 
+        ourShader.setMat4("model", modelMatrix);
+        planeModel.Draw(ourShader);
+
 
         // Swap buffers and poll IO events
         glfwSwapBuffers(window);
