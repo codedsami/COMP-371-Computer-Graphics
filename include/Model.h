@@ -19,7 +19,7 @@
 #include <vector>
 
 // Forward declaration
-unsigned int TextureFromFile(const char *path, const std::string &directory);
+unsigned int TextureFromFile(const char *path, const std::string &directory, const aiScene* scene);
 
 struct Vertex {
     glm::vec3 Position;
@@ -163,13 +163,14 @@ private:
         }
 
         aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];    
-        std::vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
+        std::vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse", scene);
         textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
         
         return Mesh(vertices, indices, textures);
     }
 
-    std::vector<Texture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName)
+    // --- UPDATED to pass the aiScene to the texture loader ---
+    std::vector<Texture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName, const aiScene* scene)
     {
         std::vector<Texture> textures;
         for(unsigned int i = 0; i < mat->GetTextureCount(type); i++)
@@ -189,18 +190,9 @@ private:
             if(!skip)
             {
                 Texture texture;
-                // --- START: Added Debug and Fallback Logic ---
-                std::cout << "Loading texture: " << str.C_Str() << " from directory: " << this->directory << std::endl;
-                texture.id = TextureFromFile(str.C_Str(), this->directory);
+                texture.id = TextureFromFile(str.C_Str(), this->directory, scene); // Pass scene pointer
                 texture.type = typeName;
                 texture.path = str.C_Str();
-                if (texture.id == 0) {
-                    std::cout << "Failed to load texture: " << str.C_Str() << ", trying with 'textures/' prefix" << std::endl;
-                    std::string newPath = std::string("textures/") + std::string(str.C_Str());
-                    texture.id = TextureFromFile(newPath.c_str(), this->directory);
-                    texture.path = newPath;
-                }
-                // --- END: Added Debug and Fallback Logic ---
                 textures.push_back(texture);
                 textures_loaded.push_back(texture);
             }
@@ -209,20 +201,37 @@ private:
     }
 };
 
-unsigned int TextureFromFile(const char *path, const std::string &directory)
-{
-    std::string filename = std::string(path);
-    filename = directory + '/' + filename;
-    
-    // --- START: Added Debug Print ---
-    std::cout << "Attempting to load texture file: " << filename << std::endl;
-    // --- END: Added Debug Print ---
 
+// --- UPDATED to handle both file paths and embedded textures from GLB files ---
+unsigned int TextureFromFile(const char *path, const std::string &directory, const aiScene* scene)
+{
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
-    unsigned char *data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
+    unsigned char *data = nullptr;
+
+    // Check if the path indicates an embedded texture
+    if (path[0] == '*')
+    {
+        std::cout << "Loading embedded texture: " << path << std::endl;
+        int textureIndex = std::stoi(std::string(path).substr(1));
+        if (textureIndex < scene->mNumTextures) {
+            aiTexture* embeddedTexture = scene->mTextures[textureIndex];
+            // mWidth is the size of the compressed data buffer
+            data = stbi_load_from_memory(reinterpret_cast<unsigned char*>(embeddedTexture->pcData), embeddedTexture->mWidth, &width, &height, &nrComponents, 0);
+        } else {
+             std::cout << "Invalid embedded texture index: " << textureIndex << std::endl;
+        }
+    }
+    else // It's a normal file path
+    {
+        std::string filename = std::string(path);
+        filename = directory + '/' + filename;
+        std::cout << "Attempting to load texture file: " << filename << std::endl;
+        data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
+    }
+
     if (data)
     {
         GLenum format = GL_RGB;
@@ -246,11 +255,7 @@ unsigned int TextureFromFile(const char *path, const std::string &directory)
     }
     else
     {
-        // --- START: Modified Error Handling ---
-        std::cout << "Texture failed to load at path: " << filename << std::endl;
-        stbi_image_free(data);
-        textureID = 0; // Return 0 if loading fails
-        // --- END: Modified Error Handling ---
+        std::cout << "Texture failed to load for path: " << path << std::endl;
     }
 
     return textureID;
