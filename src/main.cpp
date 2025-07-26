@@ -33,6 +33,12 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+// ——————————————————————————————————————————
+// Plane state (replaces the sine‑wave animation)
+glm::vec3 planePos( 0.0f, 2.0f,  0.0f );
+const float  planeSpeed =  5.0f;  // units per second
+// ——————————————————————————————————————————
+
 // GLFW Error Callback
 void glfw_error_callback(int error, const char* description) {
     std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
@@ -115,6 +121,11 @@ int main() {
 
         // Set view/projection matrices (same for all objects)
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        
+        // offset the camera 10 units back and 3 up relative to the plane
+        camera.Position = planePos + glm::vec3(0.0f, 3.0f, 10.0f);
+        camera.Front    = glm::normalize(planePos - camera.Position);
+
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
@@ -127,17 +138,27 @@ int main() {
         ourShader.setMat4("model", modelMatrix);
         pierModel.Draw(ourShader);
 
+        // ——— 1) drive planePos in world axes ———
+        float moveSpeed = planeSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) planePos += glm::vec3( 0, 0, -1) * moveSpeed;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) planePos += glm::vec3( 0, 0,  1) * moveSpeed;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) planePos += glm::vec3(-1, 0,  0) * moveSpeed;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) planePos += glm::vec3( 1, 0,  0) * moveSpeed;
 
-        // --- Draw the animated Plane ---
+        // ——— 2) chase‑cam behind plane ———
+        camera.Position = planePos + glm::vec3(0.0f, 3.0f, 10.0f);
+        camera.Front    = glm::normalize(planePos - camera.Position);
+        view = camera.GetViewMatrix();
+        ourShader.setMat4("view", view);
+
+        // ——— 3) draw plane at planePos, no yaw ———
         modelMatrix = glm::mat4(1.0f);
-        float y_offset = 0.5f * sin(2.0f * (float)glfwGetTime());
-        modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 2.0f + y_offset, 0.0f));
-        modelMatrix = glm::rotate(modelMatrix, glm::radians(-45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        // --- UPDATED: Made the plane much smaller ---
-        modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f)); 
+        modelMatrix = glm::translate(modelMatrix, planePos);
+        // flip X↔Y if your model lies flat, otherwise remove:
+        modelMatrix = glm::rotate(modelMatrix, glm::radians(-90.0f), glm::vec3(1,0,0));
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(0.01f));
         ourShader.setMat4("model", modelMatrix);
         planeModel.Draw(ourShader);
-
 
         // Swap buffers and poll IO events
         glfwSwapBuffers(window);
@@ -152,14 +173,7 @@ int main() {
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard(FORWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard(LEFT, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard(RIGHT, deltaTime);
+
 }
 
 // Callback for when the window is resized
