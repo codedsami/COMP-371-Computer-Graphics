@@ -35,4 +35,4 @@ make
 ### Contributors:
 - Miskat Mahmud (codedsami) - 40250110
 - Sadee Shadman
-- Maharaj
+- Maharaj Teertha Deb (TeerthaDeb) - 40227747
