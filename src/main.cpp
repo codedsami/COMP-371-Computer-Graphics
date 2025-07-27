@@ -39,6 +39,9 @@ glm::vec3 planePos( 0.0f, 2.0f,  0.0f );
 const float  planeSpeed =  5.0f;  // units per second
 // ——————————————————————————————————————————
 
+ // Tracking  Previous Plane Position to Calculate Direction
+glm::vec3 lastPlanePos = planePos;
+
 // GLFW Error Callback
 void glfw_error_callback(int error, const char* description) {
     std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
@@ -145,18 +148,51 @@ int main() {
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) planePos += glm::vec3(-1, 0,  0) * moveSpeed;
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) planePos += glm::vec3( 1, 0,  0) * moveSpeed;
 
+        //Calculate Plane Direction and Apply Rotation
+        glm::vec3 moveDir = planePos - lastPlanePos;
+
+        float yaw = 0.0f; 
+
+        // Only update yaw if moving significantly
+        if (glm::length(moveDir) > 0.001f) {
+            moveDir = glm::normalize(moveDir);
+            yaw = glm::degrees(atan2(moveDir.x, -moveDir.z));
+        }
+
+        //float yaw = glm::degrees(atan2(moveDir.x, -moveDir.z));
+
+        // Calculate roll (banking tilt)
+        float roll = 0.0f;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            roll = glm::radians(20.0f); // Tilt left
+        }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            roll = glm::radians(-20.0f); // Tilt right
+        }
+
+
+        lastPlanePos = planePos;
+
         // ——— 2) chase‑cam behind plane ———
         camera.Position = planePos + glm::vec3(0.0f, 3.0f, 10.0f);
         camera.Front    = glm::normalize(planePos - camera.Position);
         view = camera.GetViewMatrix();
         ourShader.setMat4("view", view);
 
-        // ——— 3) draw plane at planePos, no yaw ———
+        //Rotate the plane model based on movement direction
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, planePos);
-        // flip X↔Y if your model lies flat, otherwise remove:
-        modelMatrix = glm::rotate(modelMatrix, glm::radians(-90.0f), glm::vec3(1,0,0));
+
+        modelMatrix = glm::rotate(modelMatrix, glm::radians(180.0f), glm::vec3(0, 1, 0)); // initial flip
+        modelMatrix = glm::rotate(modelMatrix, glm::radians(-90.0f), glm::vec3(1, 0, 0)); // stand upright
+
+        modelMatrix = glm::rotate(modelMatrix, glm::radians(yaw), glm::vec3(0, 1, 0)); // apply yaw
+
+        modelMatrix = glm::rotate(modelMatrix, roll, glm::vec3(0, 0, 1)); // apply roll
+
         modelMatrix = glm::scale(modelMatrix, glm::vec3(0.01f));
+
+
         ourShader.setMat4("model", modelMatrix);
         planeModel.Draw(ourShader);
 
