@@ -17,14 +17,20 @@
 // Function Prototypes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset); // Added for orbit camera
 void processInput(GLFWwindow *window);
 
 // Window dimensions
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
-// Camera - Adjusted for a better view of the scene
-Camera camera(glm::vec3(0.0f, 4.0f, 18.0f));
+// --- UPDATED: Define plane position BEFORE the camera that uses it ---
+// Plane state
+glm::vec3 planePos( 0.0f, 2.0f,  0.0f );
+const float  planeSpeed =  5.0f;  // units per second
+
+// --- UPDATED: Initialize the camera to target the plane's starting position ---
+Camera camera(planePos);
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -32,12 +38,6 @@ bool firstMouse = true;
 // Timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
-
-// ——————————————————————————————————————————
-// Plane state (replaces the sine‑wave animation)
-glm::vec3 planePos( 0.0f, 2.0f,  0.0f );
-const float  planeSpeed =  5.0f;  // units per second
-// ——————————————————————————————————————————
 
  // Tracking  Previous Plane Position to Calculate Direction
 glm::vec3 lastPlanePos = planePos;
@@ -73,10 +73,12 @@ int main() {
     }
     glfwMakeContextCurrent(window);
 
+    // --- UPDATED: Register the scroll callback ---
     // Set callbacks
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
-
+    glfwSetScrollCallback(window, scroll_callback);
+    
     // Capture the mouse cursor
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -122,13 +124,11 @@ int main() {
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
 
+        // --- UPDATED: Use a fixed FOV because the orbit camera has no "Zoom" member ---
         // Set view/projection matrices (same for all objects)
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         
-        // offset the camera 10 units back and 3 up relative to the plane
-        camera.Position = planePos + glm::vec3(0.0f, 3.0f, 10.0f);
-        camera.Front    = glm::normalize(planePos - camera.Position);
-
+        // --- UPDATED: The GetViewMatrix() now handles everything. No more manual camera positioning! ---
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
@@ -159,8 +159,6 @@ int main() {
             yaw = glm::degrees(atan2(moveDir.x, -moveDir.z));
         }
 
-        //float yaw = glm::degrees(atan2(moveDir.x, -moveDir.z));
-
         // Calculate roll (banking tilt)
         float roll = 0.0f;
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
@@ -170,14 +168,10 @@ int main() {
             roll = glm::radians(-20.0f); // Tilt right
         }
 
-
         lastPlanePos = planePos;
 
-        // ——— 2) chase‑cam behind plane ———
-        camera.Position = planePos + glm::vec3(0.0f, 3.0f, 10.0f);
-        camera.Front    = glm::normalize(planePos - camera.Position);
-        view = camera.GetViewMatrix();
-        ourShader.setMat4("view", view);
+        // --- UPDATED: Tell the camera where the plane is. This is the new "chase-cam" logic. ---
+        camera.Target = planePos;
 
         //Rotate the plane model based on movement direction
         modelMatrix = glm::mat4(1.0f);
@@ -235,4 +229,10 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     lastY = ypos;
 
     camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+// --- UPDATED: Added the scroll callback function ---
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }
