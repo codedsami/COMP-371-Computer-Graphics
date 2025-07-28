@@ -13,6 +13,8 @@
 #include "Model.h" // Use the new Model header
 
 #include <iostream>
+#include <iomanip> // print speed on console
+
 
 // Function Prototypes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -26,8 +28,11 @@ const unsigned int SCR_HEIGHT = 720;
 
 // --- UPDATED: Define plane position BEFORE the camera that uses it ---
 // Plane state
-glm::vec3 planePos( 0.0f, 2.0f,  0.0f );
-const float  planeSpeed =  5.0f;  // units per second
+glm::vec3 planePos( 0.0f, 20.0f,  50.0f );
+float planeSpeed    = 10.0f; // units per second, no longer const
+float planeYaw      = 0.0f;  // left/right turn angle in degrees
+float planePitch    = 0.0f;  // up/down angle in degrees
+const float turnSpeed = 80.0f; // degrees per second
 
 // --- UPDATED: Initialize the camera to target the plane's starting position ---
 Camera camera(planePos);
@@ -126,7 +131,7 @@ int main() {
 
         // --- UPDATED: Use a fixed FOV because the orbit camera has no "Zoom" member ---
         // Set view/projection matrices (same for all objects)
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
         
         // --- UPDATED: The GetViewMatrix() now handles everything. No more manual camera positioning! ---
         glm::mat4 view = camera.GetViewMatrix();
@@ -136,63 +141,72 @@ int main() {
         
         // --- Draw the Pier ---
         glm::mat4 modelMatrix = glm::mat4(1.0f);
-        modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -2.0f, 0.0f)); 
+        modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));
         modelMatrix = glm::scale(modelMatrix, glm::vec3(2.0f, 2.0f, 2.0f));     
         ourShader.setMat4("model", modelMatrix);
         pierModel.Draw(ourShader);
 
-        // ——— 1) drive planePos in world axes ———
-        float moveSpeed = planeSpeed * deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) planePos += glm::vec3( 0, 0, -1) * moveSpeed;
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) planePos += glm::vec3( 0, 0,  1) * moveSpeed;
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) planePos += glm::vec3(-1, 0,  0) * moveSpeed;
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) planePos += glm::vec3( 1, 0,  0) * moveSpeed;
 
-        //Calculate Plane Direction and Apply Rotation
-        glm::vec3 moveDir = planePos - lastPlanePos;
+        
+        // --- FINALIZED PLANE LOGIC ---
 
-        float yaw = 0.0f; 
+        // 1. Control speed and orientation with keyboard
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) planeSpeed += 20.0f * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) planeSpeed -= 20.0f * deltaTime;
+        if (planeSpeed < 0.0f) planeSpeed = 0.0f;
 
-        // Only update yaw if moving significantly
-        if (glm::length(moveDir) > 0.001f) {
-            moveDir = glm::normalize(moveDir);
-            yaw = glm::degrees(atan2(moveDir.x, -moveDir.z));
-        }
 
-        // Calculate roll (banking tilt)
-        float roll = 0.0f;
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-            roll = glm::radians(20.0f); // Tilt left
-        }
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-            roll = glm::radians(-20.0f); // Tilt right
-        }
+        // W, A, S, D for movement
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) planeYaw += turnSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) planeYaw -= turnSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) planePitch -= turnSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) planePitch += turnSpeed * deltaTime;
+        
+        // 2. Build the plane's complete rotation matrix from all controls
+        glm::mat4 rotationMatrix = glm::mat4(1.0f);
+        // Initial corrections to orient the model correctly
+        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        // Flight controls
+        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(planeYaw), glm::vec3(0.0f, 1.0f, 0.0f));
+        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-planePitch), glm::vec3(1.0f, 0.0f, 0.0f));
+        // NOTE: Banking/roll effect has been removed for clean turning.
 
-        lastPlanePos = planePos;
+        // 3. Derive the TRUE forward vector directly from the final rotation matrix
+        // The forward vector is the negative of the Z-axis column (index 2) of the matrix
+        glm::vec3 planeForward = -glm::vec3(rotationMatrix[1]);
 
-        // --- UPDATED: Tell the camera where the plane is. This is the new "chase-cam" logic. ---
+        // 4. Update the plane's position
+        planePos += planeForward * planeSpeed * deltaTime;
+
+        // 5. Update the camera's target
         camera.Target = planePos;
 
-        //Rotate the plane model based on movement direction
+        // 6. Build the final model matrix for rendering (Translate -> Rotate -> Scale)
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, planePos);
-
-        modelMatrix = glm::rotate(modelMatrix, glm::radians(180.0f), glm::vec3(0, 1, 0)); // initial flip
-        modelMatrix = glm::rotate(modelMatrix, glm::radians(-90.0f), glm::vec3(1, 0, 0)); // stand upright
-
-        modelMatrix = glm::rotate(modelMatrix, glm::radians(yaw), glm::vec3(0, 1, 0)); // apply yaw
-
-        modelMatrix = glm::rotate(modelMatrix, roll, glm::vec3(0, 0, 1)); // apply roll
-
-        modelMatrix = glm::scale(modelMatrix, glm::vec3(0.01f));
-
-
+        modelMatrix = modelMatrix * rotationMatrix; // Apply the combined rotation
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f));
+        
         ourShader.setMat4("model", modelMatrix);
         planeModel.Draw(ourShader);
+
+
+
+
+
+        // --- NEW: Print speed to console every half second ---
+        static float printTimer = 0.0f;
+        printTimer += deltaTime;
+        if (printTimer > 0.5f) {
+            std::cout << "Plane Speed: " << std::fixed << std::setprecision(1) << planeSpeed << " m/s\r";
+            printTimer = 0.0f;
+        }
 
         // Swap buffers and poll IO events
         glfwSwapBuffers(window);
         glfwPollEvents();
+        
     }
     
     glfwTerminate();
