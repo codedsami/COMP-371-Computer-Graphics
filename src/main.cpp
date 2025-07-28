@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp> // for rotation against plane's axis...
 
 #include "Shader.h"
 #include "Camera.h"
@@ -26,13 +27,12 @@ void processInput(GLFWwindow *window);
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
-// --- UPDATED: Define plane position BEFORE the camera that uses it ---
-// Plane state
+
+// --- UPDATED: Plane state using Quaternions for orientation ---
 glm::vec3 planePos( 0.0f, 20.0f,  50.0f );
-float planeSpeed    = 10.0f; // units per second, no longer const
-float planeYaw      = 0.0f;  // left/right turn angle in degrees
-float planePitch    = 0.0f;  // up/down angle in degrees
-const float turnSpeed = 80.0f; // degrees per second
+float planeSpeed = 10.0f;
+const float turnSpeed = 80.0f;
+glm::quat planeOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity quaternion
 
 // --- UPDATED: Initialize the camera to target the plane's starting position ---
 Camera camera(planePos);
@@ -103,9 +103,15 @@ int main() {
     // Load both models
     Model pierModel("../src/Models/pier.obj");
     Model planeModel("../src/Models/plane/plane.glb");
-    
+
+
     // Define a light source position in world space
     glm::vec3 lightPos(5.0f, 20.0f, 15.0f);
+
+    // --- NEW: Apply initial correction rotations to the quaternion ---
+    planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
 
     // Main Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -148,44 +154,48 @@ int main() {
 
 
         
-        // --- FINALIZED PLANE LOGIC ---
+        // --- FINALIZED PLANE LOGIC (with Quaternions) ---
 
-        // 1. Control speed and orientation with keyboard
+        // 1. Control speed with keyboard
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) planeSpeed += 20.0f * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) planeSpeed -= 20.0f * deltaTime;
         if (planeSpeed < 0.0f) planeSpeed = 0.0f;
 
+        // 2. Calculate rotation amounts for this frame
+        float yawAmount = 0.0f;
+        float pitchAmount = 0.0f;
+        float rollAmount = 0.0f;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) yawAmount = turnSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) yawAmount = -turnSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) pitchAmount = turnSpeed * deltaTime;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitchAmount = -turnSpeed * deltaTime; 
 
-        // W, A, S, D for movement
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) planeYaw += turnSpeed * deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) planeYaw -= turnSpeed * deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) planePitch -= turnSpeed * deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) planePitch += turnSpeed * deltaTime;
+        // 3. Create small rotation quaternions for this frame's input
+        glm::quat pitchQuat = glm::angleAxis(glm::radians(pitchAmount), glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::quat yawQuat = glm::angleAxis(glm::radians(yawAmount), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // 4. Update the main orientation by multiplying with the new rotations
+        // This applies the rotation in the plane's local space
+        planeOrientation = yawQuat * planeOrientation;
+        planeOrientation = planeOrientation * pitchQuat;
         
-        // 2. Build the plane's complete rotation matrix from all controls
-        glm::mat4 rotationMatrix = glm::mat4(1.0f);
-        // Initial corrections to orient the model correctly
-        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-        // Flight controls
-        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(planeYaw), glm::vec3(0.0f, 1.0f, 0.0f));
-        rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-planePitch), glm::vec3(1.0f, 0.0f, 0.0f));
-        // NOTE: Banking/roll effect has been removed for clean turning.
+        // 5. Derive the TRUE forward, up, and right vectors from the orientation
+        // This model's "forward" is its local Y-axis due to initial rotations
+        glm::vec3 planeForward = -(planeOrientation * glm::vec3(0.0f, 1.0f, 0.0f)); // so it moves forward in the direction it's facing
+        glm::vec3 planeUp = planeOrientation * glm::vec3(0.0f, 0.0f, 1.0f); // Becomes the new "up"
+        glm::vec3 planeRight = planeOrientation * glm::vec3(1.0f, 0.0f, 0.0f);
 
-        // 3. Derive the TRUE forward vector directly from the final rotation matrix
-        // The forward vector is the negative of the Z-axis column (index 2) of the matrix
-        glm::vec3 planeForward = -glm::vec3(rotationMatrix[1]);
 
-        // 4. Update the plane's position
+        // 6. Update the plane's position
         planePos += planeForward * planeSpeed * deltaTime;
 
-        // 5. Update the camera's target
+        // 7. Update the camera's target
         camera.Target = planePos;
 
-        // 6. Build the final model matrix for rendering (Translate -> Rotate -> Scale)
+        // 8. Build the final model matrix for rendering
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, planePos);
-        modelMatrix = modelMatrix * rotationMatrix; // Apply the combined rotation
+        modelMatrix = modelMatrix * glm::mat4_cast(planeOrientation); // Convert quaternion to rotation matrix
         modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f));
         
         ourShader.setMat4("model", modelMatrix);
@@ -196,12 +206,8 @@ int main() {
 
 
         // --- NEW: Print speed to console every half second ---
-        static float printTimer = 0.0f;
-        printTimer += deltaTime;
-        if (printTimer > 0.5f) {
-            std::cout << "Plane Speed: " << std::fixed << std::setprecision(1) << planeSpeed << " m/s\r";
-            printTimer = 0.0f;
-        }
+        std::cout << "Plane Speed: " << std::fixed << std::setprecision(1) << planeSpeed << " m/s\r";
+
 
         // Swap buffers and poll IO events
         glfwSwapBuffers(window);
