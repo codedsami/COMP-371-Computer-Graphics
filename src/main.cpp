@@ -22,6 +22,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset); // Added for orbit camera
 void processInput(GLFWwindow *window);
+bool CheckCollision(const glm::vec3& sphereCenter, float sphereRadius, const glm::vec3& boxMin, const glm::vec3& boxMax);
 
 // Window dimensions
 const unsigned int SCR_WIDTH = 1280;
@@ -102,6 +103,7 @@ int main() {
 
     // Load both models
     Model pierModel("../src/Models/casa_city_logo.glb");
+    std::cout << "City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/plane.glb");
 
 
@@ -137,7 +139,7 @@ int main() {
 
         // --- UPDATED: Use a fixed FOV because the orbit camera has no "Zoom" member ---
         // Set view/projection matrices (same for all objects)
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 5000.0f);
         
         // --- UPDATED: The GetViewMatrix() now handles everything. No more manual camera positioning! ---
         glm::mat4 view = camera.GetViewMatrix();
@@ -187,12 +189,52 @@ int main() {
 
 
         // 6. Update the plane's position
-        planePos += planeForward * planeSpeed * deltaTime;
+        glm::vec3 nextPlanePos = planePos + planeForward * planeSpeed * deltaTime;
 
-        // 7. Update the camera's target
-        camera.Target = planePos;
+        // 7. Check for collisions
+        bool collisionDetected = false;
+        float planeRadius = 1.5f; // Bounding sphere radius for the plane, tweak as needed
+        
+        // Define the city's transformation matrix (position and scale)
+        glm::mat4 cityModelMatrix = glm::mat4(1.0f);
+        cityModelMatrix = glm::translate(cityModelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));
+        cityModelMatrix = glm::scale(cityModelMatrix, glm::vec3(2.0f, 2.0f, 2.0f));
+
+        for (const auto& mesh : pierModel.meshes) {
+
+            // --- NEW: Ignore any mesh that is unrealistically large ---
+            if ((mesh.maxAABB.y - mesh.minAABB.y) > 100.0f) continue;
+
+            // Transform the mesh's local AABB corners into world space
+            glm::vec3 worldMin = cityModelMatrix * glm::vec4(mesh.minAABB, 1.0f);
+            glm::vec3 worldMax = cityModelMatrix * glm::vec4(mesh.maxAABB, 1.0f);
+
+            // IMPORTANT: Ensure min is actually min and max is max after transformation
+            glm::vec3 realMin = glm::min(worldMin, worldMax);
+            glm::vec3 realMax = glm::max(worldMin, worldMax);
+
+            // --- NEW DEBUG: Print the size of any very large mesh ---
+            glm::vec3 boxSize = realMax - realMin;
+            if (boxSize.y > 20.0f) { // Only print for objects taller than 20 units
+                std::cout << "Found a very large mesh! Size: Y = " << boxSize.y << std::endl;
+            }
+
+            if (CheckCollision(nextPlanePos, planeRadius, realMin, realMax)) {
+                collisionDetected = true;
+                break; // A collision was found, no need to check other meshes
+            }
+        }
+
 
         // 8. Build the final model matrix for rendering
+
+        if (!collisionDetected) {
+            planePos = nextPlanePos;
+        }
+
+        camera.Target = planePos;
+
+
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, planePos);
         modelMatrix = modelMatrix * glm::mat4_cast(planeOrientation); // Convert quaternion to rotation matrix
@@ -249,6 +291,23 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     lastY = ypos;
 
     camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+bool CheckCollision(const glm::vec3& sphereCenter, float sphereRadius, const glm::vec3& boxMin, const glm::vec3& boxMax) {
+    // Get the closest point on the AABB to the sphere's center
+    float x = std::max(boxMin.x, std::min(sphereCenter.x, boxMax.x));
+    float y = std::max(boxMin.y, std::min(sphereCenter.y, boxMax.y));
+    float z = std::max(boxMin.z, std::min(sphereCenter.z, boxMax.z));
+
+    // Calculate the distance between the closest point and the sphere's center
+    float distance = std::sqrt(
+        (x - sphereCenter.x) * (x - sphereCenter.x) +
+        (y - sphereCenter.y) * (y - sphereCenter.y) +
+        (z - sphereCenter.z) * (z - sphereCenter.z)
+    );
+
+    // If the distance is less than the sphere's radius, there is a collision
+    return distance < sphereRadius;
 }
 
 // --- UPDATED: Added the scroll callback function ---
