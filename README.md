@@ -36,3 +36,9 @@ make
 - Miskat Mahmud (codedsami) - 40250110
 - Sadee Shadman (sadeeshadman) - 40236919
 - Maharaj Teertha Deb (TeerthaDeb) - 40227747
+
+
+## Credits:
+ City : Casa City Logo.
+  downloadable url : https://sketchfab.com/3d-models/casa-city-logo-b300821c7bed47329f504f1129a26161
+  Author : https://sketchfab.com/digitalurban

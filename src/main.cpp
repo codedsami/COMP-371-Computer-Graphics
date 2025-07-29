@@ -101,7 +101,7 @@ int main() {
     Shader ourShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
 
     // Load both models
-    Model pierModel("../src/Models/pier.obj");
+    Model pierModel("../src/Models/casa_city_logo.glb");
     Model planeModel("../src/Models/plane/plane.glb");
 
 
