@@ -103,6 +103,7 @@ int main() {
     // Load both models
     Model pierModel("../src/Models/casa_city_logo.glb");
     Model planeModel("../src/Models/plane/plane.glb");
+    Model sunModel("../src/Models/the_sun.glb");
 
 
     // Define a light source position in world space
@@ -120,6 +121,19 @@ int main() {
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
+        // ─── moving point‑light ───
+        const float lightRadius = 800.0f;   // push it farther out horizontally
+        const float lightHeight = 800.0f;   // raise it above your city
+        const float lightSpeed  = 0.02f;     // revolutions/sec
+
+        // t increases over time, so cos/sin give us a circular path
+        float t = currentFrame * lightSpeed * 2.0f * 3.14159f;        
+        glm::vec3 movingLightPos = {
+            lightRadius * cos(t),
+            lightHeight,
+            lightRadius * sin(t)
+        };
+
         // Input
         processInput(window);
 
@@ -131,7 +145,8 @@ int main() {
         ourShader.use();
 
         // Set uniforms that are the same for all objects
-        ourShader.setVec3("lightPos", lightPos);
+        // ourShader.setVec3("lightPos", lightPos);
+        ourShader.setVec3("lightPos", movingLightPos);
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
 
@@ -144,6 +159,16 @@ int main() {
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
 
+        // … after ourShader.use() and after setting projection & view …
+
+        // draw the sun marker
+        glm::mat4 lightModel = glm::mat4(1.0f);
+        lightModel = glm::translate(lightModel, movingLightPos);
+        // make it big enough to see relative to your scene:
+        lightModel = glm::scale(lightModel, glm::vec3(20.0f));  
+        ourShader.setMat4("model",     lightModel);
+        ourShader.setVec3("lightColor", 1.0f,1.0f,1.0f);
+        sunModel.Draw(ourShader);
         
         // --- Draw the Pier ---
         glm::mat4 modelMatrix = glm::mat4(1.0f);
