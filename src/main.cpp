@@ -29,13 +29,13 @@ const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
 
-// --- UPDATED: Plane state using Quaternions for orientation ---
+// Plane state using Quaternions for orientation ---
 glm::vec3 planePos( 0.0f, 550.0f,  50.0f ); // Starting position of the plane
 float planeSpeed = 10.0f;
 const float turnSpeed = 80.0f;
 glm::quat planeOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity quaternion
 
-// --- UPDATED: Initialize the camera to target the plane's starting position ---
+// Initialize the camera to target the plane's starting position ---
 Camera camera(planePos);
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
@@ -100,9 +100,9 @@ int main() {
 
     // Build and compile our shaders
     Shader ourShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
-    Shader solidShader("../src/shaders/solid.vs", "../src/shaders/solid.fs"); // <-- ADD THIS LINE
+    Shader solidShader("../src/shaders/solid.vs", "../src/shaders/solid.fs"); //
 
-    // Load both models
+    // Load 3 models
     Model pierModel("../src/Models/casa_city_logo.glb");
     std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/plane.glb");
@@ -110,11 +110,10 @@ int main() {
 
 
     // Define a light source position in world space
-    // glm::vec3 lightPos(5.0f, 20.0f, 15.0f);
     glm::vec3 lightPos;
 
     // --- NEW: Apply initial correction rotations to the quaternion ---
-    planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // without this, the plane faces the wrong way, don't know why , but it just works....
     planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
 
@@ -139,15 +138,16 @@ int main() {
         ourShader.setVec3("lightPos", lightPos);
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
-        // --- ADD THESE TWO LINES ---
+        
         ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);    // A very dark, subtle sky blue
-        ourShader.setVec3("groundColor", 0.04f, 0.03f, 0.02f); // A very dark, subtle earth tone
+        ourShader.setVec3("groundColor", 0.03f, 0.03f, 0.03f); // A very dark, neutral gray for city reflections
 
-        // --- UPDATED: Use a fixed FOV because the orbit camera has no "Zoom" member ---
+
         // Set view/projection matrices (same for all objects)
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 5000.0f);
         
-        // --- UPDATED: The GetViewMatrix() now handles everything. No more manual camera positioning! ---
+
+        // Camera view matrix
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
@@ -158,7 +158,7 @@ int main() {
         // 1. Animate the light source (the sun) to orbit the city
         glm::mat4 modelMatrix = glm::mat4(1.0f); 
         float orbitRadius = 400.0f;
-        float orbitSpeed = 0.15f;
+        float orbitSpeed = 0.015f;
         lightPos.x = sin(glfwGetTime() * orbitSpeed) * orbitRadius;
         lightPos.y = 1600.0f; // Keep the sun at a constant height, HEIGHT OF THE SUN
         lightPos.z = cos(glfwGetTime() * orbitSpeed) * orbitRadius;
@@ -349,7 +349,8 @@ bool CheckCollision(const glm::vec3& sphereCenter, float sphereRadius, const glm
     return distance < sphereRadius;
 }
 
-// --- UPDATED: Added the scroll callback function ---
+
+
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));

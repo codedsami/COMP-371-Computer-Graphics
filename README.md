@@ -56,3 +56,7 @@ Finally Run it...
 
     ### SUN : Sun model:
         * downloadable url : https://web.mit.edu/djwendel/www/weblogo/shapes/basic-shapes/sphere/sphere.obj
+    
+    ### Plane : Plane model:
+        * downloadable url : https://sketchfab.com/3d-models/supermarine-spitfire-8349f26e1e88455da75dd7352b02b794
+        * Author : https://sketchfab.com/kryik1023
