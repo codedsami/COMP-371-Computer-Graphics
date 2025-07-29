@@ -29,7 +29,7 @@ const unsigned int SCR_HEIGHT = 720;
 
 
 // --- UPDATED: Plane state using Quaternions for orientation ---
-glm::vec3 planePos( 0.0f, 20.0f,  50.0f );
+glm::vec3 planePos( 0.0f, 550.0f,  50.0f ); // Starting position of the plane
 float planeSpeed = 10.0f;
 const float turnSpeed = 80.0f;
 glm::quat planeOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity quaternion
