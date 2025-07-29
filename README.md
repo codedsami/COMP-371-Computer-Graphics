@@ -34,5 +34,5 @@ make
 
 ### Contributors:
 - Miskat Mahmud (codedsami) - 40250110
-- Sadee Shadman
+- Sadee Shadman (sadeeshadman) - 40236919
 - Maharaj Teertha Deb (TeerthaDeb) - 40227747
