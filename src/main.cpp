@@ -100,15 +100,18 @@ int main() {
 
     // Build and compile our shaders
     Shader ourShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
+    Shader solidShader("../src/shaders/solid.vs", "../src/shaders/solid.fs"); // <-- ADD THIS LINE
 
     // Load both models
     Model pierModel("../src/Models/casa_city_logo.glb");
-    std::cout << "City model has " << pierModel.meshes.size() << " meshes." << std::endl;
+    std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/plane.glb");
+    Model sunModel("../src/Models/sphere.obj");
 
 
     // Define a light source position in world space
-    glm::vec3 lightPos(5.0f, 20.0f, 15.0f);
+    // glm::vec3 lightPos(5.0f, 20.0f, 15.0f);
+    glm::vec3 lightPos;
 
     // --- NEW: Apply initial correction rotations to the quaternion ---
     planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -136,6 +139,9 @@ int main() {
         ourShader.setVec3("lightPos", lightPos);
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+        // --- ADD THESE TWO LINES ---
+        ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);    // A very dark, subtle sky blue
+        ourShader.setVec3("groundColor", 0.04f, 0.03f, 0.02f); // A very dark, subtle earth tone
 
         // --- UPDATED: Use a fixed FOV because the orbit camera has no "Zoom" member ---
         // Set view/projection matrices (same for all objects)
@@ -147,10 +153,39 @@ int main() {
         ourShader.setMat4("view", view);
 
         
-        // --- Draw the Pier ---
-        glm::mat4 modelMatrix = glm::mat4(1.0f);
+        // --- Animate the Sun and Draw the Scene ---
+
+        // 1. Animate the light source (the sun) to orbit the city
+        glm::mat4 modelMatrix = glm::mat4(1.0f); 
+        float orbitRadius = 400.0f;
+        float orbitSpeed = 0.15f;
+        lightPos.x = sin(glfwGetTime() * orbitSpeed) * orbitRadius;
+        lightPos.y = 1600.0f; // Keep the sun at a constant height, HEIGHT OF THE SUN
+        lightPos.z = cos(glfwGetTime() * orbitSpeed) * orbitRadius;
+
+        // 2. Draw the Sun model (using the solid color shader)
+        solidShader.use();
+        solidShader.setMat4("projection", projection);
+        solidShader.setMat4("view", view);
+        solidShader.setVec3("lightPos", lightPos); 
+        solidShader.setVec3("viewPos", camera.Position);
+        solidShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+        solidShader.setVec3("objectColor", 1.0f, 1.0f, 0.0f); // Bright yellow for the sun
+
+        modelMatrix = glm::mat4(1.0f);
+        modelMatrix = glm::translate(modelMatrix, lightPos);
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(25.0f));
+        solidShader.setMat4("model", modelMatrix);
+        sunModel.Draw(solidShader);
+
+        // 3. Draw the City/Pier and Plane (using the main texture shader)
+        ourShader.use();
+        ourShader.setVec3("lightPos", lightPos); // Update the light position for this shader too
+
+        // Draw the City/Pier model
+        modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));
-        modelMatrix = glm::scale(modelMatrix, glm::vec3(2.0f, 2.0f, 2.0f));     
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(2.0f, 2.0f, 2.0f));      
         ourShader.setMat4("model", modelMatrix);
         pierModel.Draw(ourShader);
 
@@ -216,7 +251,7 @@ int main() {
             // --- NEW DEBUG: Print the size of any very large mesh ---
             glm::vec3 boxSize = realMax - realMin;
             if (boxSize.y > 20.0f) { // Only print for objects taller than 20 units
-                std::cout << "Found a very large mesh! Size: Y = " << boxSize.y << std::endl;
+                // std::cout << "DEBUG::: " << "Found a very large mesh! Size: Y = " << boxSize.y << std::endl;
             }
 
             if (CheckCollision(nextPlanePos, planeRadius, realMin, realMax)) {
@@ -256,6 +291,10 @@ int main() {
         glfwPollEvents();
         
     }
+
+
+
+    
     
     glfwTerminate();
     return 0;
