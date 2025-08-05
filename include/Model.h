@@ -39,6 +39,10 @@ public:
     std::vector<unsigned int> indices;
     std::vector<Texture>      textures;
     unsigned int VAO;
+    // --- NEW: Add AABB properties --- for collision detection
+    // These will be used to calculate the Axis-Aligned Bounding Box (AABB) of the mesh
+    glm::vec3 minAABB;
+    glm::vec3 maxAABB;
 
     Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures)
     {
@@ -143,20 +147,32 @@ private:
         std::vector<unsigned int> indices;
         std::vector<Texture> textures;
 
-        for(unsigned int i = 0; i < mesh->mNumVertices; i++)
-        {
+        glm::vec3 minAABB = glm::vec3(mesh->mVertices[0].x, mesh->mVertices[0].y, mesh->mVertices[0].z);
+        glm::vec3 maxAABB = minAABB;
+
+        for(unsigned int i = 0 ; i < mesh -> mNumVertices ; i++){
             Vertex vertex;
             vertex.Position = glm::vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
-            if (mesh->HasNormals())
+
+            // Update AABB
+            minAABB.x = std::min(minAABB.x, vertex.Position.x);
+            minAABB.y = std::min(minAABB.y, vertex.Position.y);
+            minAABB.z = std::min(minAABB.z, vertex.Position.z);
+            maxAABB.x = std::max(maxAABB.x, vertex.Position.x);
+            maxAABB.y = std::max(maxAABB.y, vertex.Position.y);
+            maxAABB.z = std::max(maxAABB.z, vertex.Position.z);
+
+            if (mesh -> HasNormals())
                 vertex.Normal = glm::vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z);
-            if(mesh->mTextureCoords[0])
+            if(mesh -> mTextureCoords[0])
                 vertex.TexCoords = glm::vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y);
             else
                 vertex.TexCoords = glm::vec2(0.0f, 0.0f);
             vertices.push_back(vertex);
         }
-        for(unsigned int i = 0; i < mesh->mNumFaces; i++)
-        {
+
+
+        for(unsigned int i = 0; i < mesh->mNumFaces; i++){
             aiFace face = mesh->mFaces[i];
             for(unsigned int j = 0; j < face.mNumIndices; j++)
                 indices.push_back(face.mIndices[j]);
@@ -165,8 +181,12 @@ private:
         aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];    
         std::vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse", scene);
         textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
-        
-        return Mesh(vertices, indices, textures);
+
+
+        Mesh newMesh(vertices, indices, textures);
+        newMesh.minAABB = minAABB;
+        newMesh.maxAABB = maxAABB;
+        return newMesh;
     }
 
     // --- UPDATED to pass the aiScene to the texture loader ---
