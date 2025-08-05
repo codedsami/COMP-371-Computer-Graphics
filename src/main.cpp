@@ -35,6 +35,8 @@ float planeSpeed = 10.0f;
 const float turnSpeed = 80.0f;
 glm::quat planeOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity quaternion
 float propellerAngle = 0.0f;
+float rudderAngle = 0.0f;
+
 
 // Initialize the camera to target the plane's starting position ---
 Camera camera(planePos);
@@ -206,7 +208,38 @@ int main() {
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) yawAmount = turnSpeed * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) yawAmount = -turnSpeed * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) pitchAmount = turnSpeed * deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitchAmount = -turnSpeed * deltaTime; 
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitchAmount = -turnSpeed * deltaTime;
+
+        // --- NEW: Rudder Control Logic ---
+        const float maxRudderAngle = 25.0f;   // The rudder's maximum turn in degrees.
+        const float rudderTurnSpeed = 150.0f; // How fast the rudder reacts.
+
+        if (yawAmount > 0)
+        { // 'A' key is pressed
+            rudderAngle += rudderTurnSpeed * deltaTime;
+        }
+        else if (yawAmount < 0)
+        { // 'D' key is pressed
+            rudderAngle -= rudderTurnSpeed * deltaTime;
+        }
+        else
+        {
+            // If no key is pressed, smoothly return the rudder to the center.
+            if (rudderAngle > 0.1f)
+            {
+                rudderAngle -= rudderTurnSpeed * deltaTime;
+            }
+            else if (rudderAngle < -0.1f)
+            {
+                rudderAngle += rudderTurnSpeed * deltaTime;
+            }
+            else
+            {
+                rudderAngle = 0.0f;
+            }
+        }
+        // Clamp the rudderAngle to its maximum limits.
+        rudderAngle = glm::clamp(rudderAngle, -maxRudderAngle, maxRudderAngle);
 
         // 3. Create small rotation quaternions for this frame's input
         glm::quat pitchQuat = glm::angleAxis(glm::radians(pitchAmount), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -344,6 +377,23 @@ int main() {
                 glm::mat4 correctedSpin = translateBack * propellerSpin * translateToOrigin;
 
                 partTransform = planeBaseTransform * propellerTranslate * correctedSpin;
+            }
+            else if (mesh.name == "Rudder_Paint_0")
+            {
+                // 1. Define the rudder's pivot point (its hinge) in the plane's local space.
+                //    You will need to TUNE these X, Y, and Z values!
+                glm::vec3 rudderPivot(0.0f, 0.85f, -23.0f); 
+
+                // 2. Create matrices to perform a rotation around this specific pivot point.
+                glm::mat4 translateToPivot = glm::translate(glm::mat4(1.0f), rudderPivot);
+                glm::mat4 translateToModelOrigin = glm::translate(glm::mat4(1.0f), -rudderPivot);
+
+                // 3. The rudder yaws around the plane's local UP axis (Y-axis).
+                glm::mat4 rudderRotation = glm::rotate(glm::mat4(1.0f), glm::radians(rudderAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+
+                // 4. The final local transformation for the rudder.
+                //    This moves the rudder to the origin, rotates it, then moves it back to its pivot.
+                partTransform = planeBaseTransform * translateToPivot * rudderRotation * translateToModelOrigin;
             }
             else
             {
