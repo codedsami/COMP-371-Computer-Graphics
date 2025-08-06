@@ -341,8 +341,17 @@ int main() {
         
 
         // 9. Update propeller angle for rotation
-        propellerAngle += 2500.0f * deltaTime; // Degrees per second for a fast spin
-        if (propellerAngle >= 360.0f) propellerAngle -= 360.0f;
+        const float idlePropellerSpeed = 60.0f;       // The propeller's minimum spin speed (degrees per second)
+        const float propellerSpeedMultiplier = 9.0f;  // How much faster the propeller spins per m/s of plane speed
+
+        // Calculate the total rotation speed for this frame
+        float currentPropellerSpeed = idlePropellerSpeed + (planeSpeed * propellerSpeedMultiplier);
+
+        // Update the propeller's angle
+        propellerAngle += currentPropellerSpeed * deltaTime;
+        if (propellerAngle >= 360.0f) {
+            propellerAngle -= 360.0f; // Keep the angle from growing infinitely large
+        }
 
         // 10. Define the plane's base transformation for the current frame
         glm::mat4 planeBaseTransform = glm::translate(glm::mat4(1.0f), planePos) * glm::mat4_cast(planeOrientation);
