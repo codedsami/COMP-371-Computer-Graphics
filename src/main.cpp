@@ -120,6 +120,39 @@ int main() {
     planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, .0f, 0.0f));
 
 
+    // --- Shadow Mapping Setup ---
+    const unsigned int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
+    unsigned int depthMapFBO;
+    glGenFramebuffers(1, &depthMapFBO);
+
+    // Create depth texture
+    unsigned int depthMap;
+    glGenTextures(1, &depthMap);
+    glBindTexture(GL_TEXTURE_2D, depthMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    // Attach depth texture as FBO's depth buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Compile the new depth shader
+    Shader depthShader("../src/shaders/shadow_depth.vs", "../src/shaders/shadow_depth.fs");
+
+    // Set the texture units for the main shader (do this once)
+    ourShader.use();
+    ourShader.setInt("texture_diffuse1", 0);
+    ourShader.setInt("shadowMap", 1);
+
+
     // Main Render loop
     while (!glfwWindowShouldClose(window)) {
         // Per-frame time logic
@@ -155,7 +188,38 @@ int main() {
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
 
-        
+
+        // ======== 1. RENDER DEPTH MAP (Shadow Pass) ========
+        glm::mat4 lightProjection, lightView;
+        glm::mat4 lightSpaceMatrix;
+        float near_plane = 1.0f, far_plane = 2000.0f; // Tweak these values based on your scene size
+        // Use an orthographic projection for a directional light like the sun
+        lightProjection = glm::ortho(-500.0f, 500.0f, -500.0f, 500.0f, near_plane, far_plane);
+        lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
+        lightSpaceMatrix = lightProjection * lightView;
+
+        // Render scene from light's point of view
+        depthShader.use();
+        depthShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        // ONLY render objects that should CAST shadows.
+        // For now, let's just make the plane cast a shadow.
+        glm::mat4 planeModelMatrix = glm::translate(glm::mat4(1.0f), planePos) * glm::mat4_cast(planeOrientation);
+        planeModelMatrix = glm::scale(planeModelMatrix, glm::vec3(0.05f));
+        depthShader.setMat4("model", planeModelMatrix);
+        planeModel.Draw(depthShader);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // ======== 2. RENDER SCENE NORMALLY (Main Pass) ========
+        // Reset viewport
+        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear again for the main pass
+
+
+
         // --- Animate the Sun and Draw the Scene ---
 
         // 1. Animate the light source (the sun) to orbit the city
@@ -183,9 +247,17 @@ int main() {
 
         // 3. Draw the City/Pier and Plane (using the main texture shader)
         ourShader.use();
-        ourShader.setVec3("lightPos", lightPos); // Update the light position for this shader too
+        // Set the view and projection matrices for the camera
+        ourShader.setMat4("projection", projection);
+        ourShader.setMat4("view", view);
+
+        // Pass the light space matrix to the main shader
+        ourShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, depthMap);
 
         // Draw the City/Pier model
+         glActiveTexture(GL_TEXTURE0);
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));
         modelMatrix = glm::scale(modelMatrix, glm::vec3(2.0f, 2.0f, 2.0f));      

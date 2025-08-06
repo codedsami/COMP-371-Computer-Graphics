@@ -6,11 +6,13 @@ layout (location = 2) in vec2 aTexCoords;
 // Outputs to the fragment shader
 out vec3 FragPos;
 out vec3 Normal;
-out vec2 TexCoord; // <-- THE MISSING OUTPUT
+out vec2 TexCoord;
+out vec4 FragPosLightSpace;
 
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+uniform mat4 lightSpaceMatrix;
 
 void main()
 {
@@ -22,6 +24,9 @@ void main()
     
     // Pass the texture coordinates through
     TexCoord = aTexCoords; // <-- THE MISSING ASSIGNMENT
+
+    // Calculate the vertex position from the light's perspective for the shadow map
+    FragPosLightSpace = lightSpaceMatrix * vec4(FragPos, 1.0);
 
     // Calculate the final clip-space position
     gl_Position = projection * view * vec4(FragPos, 1.0);
