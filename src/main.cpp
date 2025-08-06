@@ -34,6 +34,9 @@ glm::vec3 planePos( 0.0f, 550.0f,  50.0f ); // Starting position of the plane
 float planeSpeed = 10.0f;
 const float turnSpeed = 80.0f;
 glm::quat planeOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity quaternion
+float propellerAngle = 0.0f;
+float rudderAngle = 0.0f;
+
 
 // Initialize the camera to target the plane's starting position ---
 Camera camera(planePos);
@@ -105,7 +108,7 @@ int main() {
     // Load 3 models
     Model pierModel("../src/Models/casa_city_logo.glb");
     std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
-    Model planeModel("../src/Models/plane/plane.glb");
+    Model planeModel("../src/Models/plane/colombian_emb_314_tucano.glb");
     Model sunModel("../src/Models/sphere.obj");
 
 
@@ -114,7 +117,7 @@ int main() {
 
     // --- NEW: Apply initial correction rotations to the quaternion ---
     planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // without this, the plane faces the wrong way, don't know why , but it just works....
-    planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, .0f, 0.0f));
 
 
     // Main Render loop
@@ -205,7 +208,38 @@ int main() {
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) yawAmount = turnSpeed * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) yawAmount = -turnSpeed * deltaTime;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) pitchAmount = turnSpeed * deltaTime;
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitchAmount = -turnSpeed * deltaTime; 
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitchAmount = -turnSpeed * deltaTime;
+
+        // --- NEW: Rudder Control Logic ---
+        const float maxRudderAngle = 25.0f;   // The rudder's maximum turn in degrees.
+        const float rudderTurnSpeed = 150.0f; // How fast the rudder reacts.
+
+        if (yawAmount > 0)
+        { // 'A' key is pressed
+            rudderAngle += rudderTurnSpeed * deltaTime;
+        }
+        else if (yawAmount < 0)
+        { // 'D' key is pressed
+            rudderAngle -= rudderTurnSpeed * deltaTime;
+        }
+        else
+        {
+            // If no key is pressed, smoothly return the rudder to the center.
+            if (rudderAngle > 0.1f)
+            {
+                rudderAngle -= rudderTurnSpeed * deltaTime;
+            }
+            else if (rudderAngle < -0.1f)
+            {
+                rudderAngle += rudderTurnSpeed * deltaTime;
+            }
+            else
+            {
+                rudderAngle = 0.0f;
+            }
+        }
+        // Clamp the rudderAngle to its maximum limits.
+        rudderAngle = glm::clamp(rudderAngle, -maxRudderAngle, maxRudderAngle);
 
         // 3. Create small rotation quaternions for this frame's input
         glm::quat pitchQuat = glm::angleAxis(glm::radians(pitchAmount), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -217,10 +251,15 @@ int main() {
         planeOrientation = planeOrientation * pitchQuat;
         
         // 5. Derive the TRUE forward, up, and right vectors from the orientation
-        // This model's "forward" is its local Y-axis due to initial rotations
-        glm::vec3 planeForward = -(planeOrientation * glm::vec3(0.0f, 1.0f, 0.0f)); // so it moves forward in the direction it's facing
-        glm::vec3 planeUp = planeOrientation * glm::vec3(0.0f, 0.0f, 1.0f); // Becomes the new "up"
-        glm::vec3 planeRight = planeOrientation * glm::vec3(1.0f, 0.0f, 0.0f);
+        // For this new model, its nose points along its local Y-axis.
+        glm::vec3 localForward(0.0f, 0.0f, 1.0f);
+        // For this new model, its canopy points along its local Z-axis.
+        glm::vec3 localUp(0.0f, 1.0f, 0.0f);
+
+        // Transform these local axes into world-space vectors using the plane's current orientation
+        glm::vec3 planeForward = planeOrientation * localForward;
+        glm::vec3 planeUp = planeOrientation * localUp;
+        glm::vec3 planeRight = glm::cross(planeForward, planeUp);
 
 
         // 6. Update the plane's position
@@ -266,23 +305,119 @@ int main() {
         if (!collisionDetected) {
             planePos = nextPlanePos;
         }
+        // camera.Target = planePos;
 
-        camera.Target = planePos;
 
+        // --- CAMERA TARGET FIX ---
+        // This vector defines the offset from the model's pivot point (planePos)
+        // to the visual center of the plane's body.
+        // EXPERIMENT WITH THESE VALUES to move the green ball.
+        glm::vec3 modelCenterOffset(0.0f, 9.0f, 3.5f); 
 
+        // Calculate the true visual center in world space by rotating the offset
+        // by the plane's current orientation.
+        glm::vec3 visualCenter = planePos + (planeOrientation * modelCenterOffset);
+
+        // Tell the camera to look at this new, correct center point.
+        // The green ball will now be drawn at this position.
+        camera.Target = visualCenter;
+
+        solidShader.use();
+        solidShader.setMat4("projection", projection);
+        solidShader.setMat4("view", view);
+        solidShader.setVec3("objectColor", 0.0f, 1.0f, 0.0f); // Bright Green
+
+        // Create a model matrix to place the sphere exactly where the camera is looking
         modelMatrix = glm::mat4(1.0f);
-        modelMatrix = glm::translate(modelMatrix, planePos);
-        modelMatrix = modelMatrix * glm::mat4_cast(planeOrientation); // Convert quaternion to rotation matrix
-        modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f));
+        modelMatrix = glm::translate(modelMatrix, camera.Target);
+        modelMatrix = glm::scale(modelMatrix, glm::vec3(0.5f)); // Make it small
+        solidShader.setMat4("model", modelMatrix);
         
-        ourShader.setMat4("model", modelMatrix);
-        planeModel.Draw(ourShader);
+        sunModel.Draw(solidShader); // Draw the green sphere
+        
+        // Switch back to the main shader for the plane
+        ourShader.use();
+        // --------------------------------------------------------
+        
+
+        // 9. Update propeller angle for rotation
+        const float idlePropellerSpeed = 60.0f;       // The propeller's minimum spin speed (degrees per second)
+        const float propellerSpeedMultiplier = 9.0f;  // How much faster the propeller spins per m/s of plane speed
+
+        // Calculate the total rotation speed for this frame
+        float currentPropellerSpeed = idlePropellerSpeed + (planeSpeed * propellerSpeedMultiplier);
+
+        // Update the propeller's angle
+        propellerAngle += currentPropellerSpeed * deltaTime;
+        if (propellerAngle >= 360.0f) {
+            propellerAngle -= 360.0f; // Keep the angle from growing infinitely large
+        }
+
+        // 10. Define the plane's base transformation for the current frame
+        glm::mat4 planeBaseTransform = glm::translate(glm::mat4(1.0f), planePos) * glm::mat4_cast(planeOrientation);
 
 
+        // // MESH NAMES OF THE PLANE MODEL
+        // std::cout << "-------------------------------------\n";
+        // std::cout << "\n--- Verifying Plane Mesh Names ---" << std::endl;
+        // for (size_t i = 0; i < planeModel.meshes.size(); ++i) {
+        //     std::cout << "Mesh at index " << i << " is named: '" << planeModel.meshes[i].name << "'" << std::endl;
+        // }
+        // std::cout << "-------------------------------------\n" << std::endl;
 
 
+        // 11. Draw each part of the model with its correct transformation
+        for (Mesh &mesh : planeModel.meshes)
+        {
+            glm::mat4 partTransform;
 
-        // --- NEW: Print speed to console every half second ---
+            // Check if the current mesh is the "Propeller"
+            if (mesh.name == "Propeller_Paint_0")
+            {
+                // The offset to move the propeller to the nose of the plane
+                glm::vec3 propellerOffset(0.0f, -0.1f, 1.75f);
+                glm::mat4 propellerTranslate = glm::translate(glm::mat4(1.0f), propellerOffset);
+
+                // --- The pivot correction you found in Part 1 ---
+                glm::vec3 pivotCorrectionOffset(0.0f, 7.75f, 1.75f); // <-- Use your final tweaked values here!
+                glm::mat4 translateToOrigin = glm::translate(glm::mat4(1.0f), -pivotCorrectionOffset);
+                glm::mat4 propellerSpin = glm::rotate(glm::mat4(1.0f), glm::radians(propellerAngle), glm::vec3(0.0f, 0.0f, 1.0f));
+                glm::mat4 translateBack = glm::translate(glm::mat4(1.0f), pivotCorrectionOffset);
+                glm::mat4 correctedSpin = translateBack * propellerSpin * translateToOrigin;
+
+                partTransform = planeBaseTransform * propellerTranslate * correctedSpin;
+            }
+            else if (mesh.name == "Rudder_Paint_0")
+            {
+                // 1. Define the rudder's pivot point (its hinge) in the plane's local space.
+                //    You will need to TUNE these X, Y, and Z values!
+                glm::vec3 rudderPivot(0.0f, 0.85f, -23.0f); 
+
+                // 2. Create matrices to perform a rotation around this specific pivot point.
+                glm::mat4 translateToPivot = glm::translate(glm::mat4(1.0f), rudderPivot);
+                glm::mat4 translateToModelOrigin = glm::translate(glm::mat4(1.0f), -rudderPivot);
+
+                // 3. The rudder yaws around the plane's local UP axis (Y-axis).
+                glm::mat4 rudderRotation = glm::rotate(glm::mat4(1.0f), glm::radians(rudderAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+
+                // 4. The final local transformation for the rudder.
+                //    This moves the rudder to the origin, rotates it, then moves it back to its pivot.
+                partTransform = planeBaseTransform * translateToPivot * rudderRotation * translateToModelOrigin;
+            }
+            else
+            {
+                // It's the plane body or another part, so just use the base transform.
+                partTransform = planeBaseTransform;
+            }
+
+            // 12. Apply final scaling and draw the mesh.
+            // NOTE: You may need to adjust the scale factor for this new model.
+            glm::mat4 finalModelMatrix = glm::scale(partTransform, glm::vec3(0.05f));
+            ourShader.setMat4("model", finalModelMatrix);
+            mesh.Draw(ourShader);
+        }
+
+
         std::cout << "Plane Speed: " << std::fixed << std::setprecision(1) << planeSpeed << " m/s\r";
 
 

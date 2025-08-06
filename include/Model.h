@@ -35,21 +35,22 @@ struct Texture {
 
 class Mesh {
 public:
-    std::vector<Vertex>       vertices;
-    std::vector<unsigned int> indices;
-    std::vector<Texture>      textures;
-    unsigned int VAO;
-    // --- NEW: Add AABB properties --- for collision detection
-    // These will be used to calculate the Axis-Aligned Bounding Box (AABB) of the mesh
-    glm::vec3 minAABB;
-    glm::vec3 maxAABB;
+    std::vector<Vertex>         vertices;
+    std::vector<unsigned int>   indices;
+    std::vector<Texture>        textures;
+    unsigned int                VAO;
+    glm::vec3                   minAABB;
+    glm::vec3                   maxAABB;
+    std::string                 name;
 
-    Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures)
+    Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures , std::string name)
     {
-        this->vertices = vertices;
-        this->indices = indices;
-        this->textures = textures;
+        this->vertices  =       vertices;
+        this->indices   =       indices;
+        this->textures  =       textures;
+        this->name      =       name;
         setupMesh();
+
     }
 
     void Draw(Shader &shader) 
@@ -183,7 +184,7 @@ private:
         textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
 
 
-        Mesh newMesh(vertices, indices, textures);
+        Mesh newMesh(vertices, indices, textures , std::string(mesh->mName.C_Str()));
         newMesh.minAABB = minAABB;
         newMesh.maxAABB = maxAABB;
         return newMesh;
