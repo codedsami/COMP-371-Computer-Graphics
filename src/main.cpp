@@ -60,23 +60,23 @@ glm::vec3 lastPlanePos = planePos;
 // ------------------ Enemy / Projectile system ------------------
 struct Enemy {
     glm::vec3 pos;
-    glm::vec3 target;     // where it's currently heading
+    glm::vec3 target;   // where it's currently heading
     float speed;
-    float yaw;            // orientation (radians)
+    float yaw;          // orientation (radians)
 };
 
 struct Projectile {
     glm::vec3 pos;
     glm::vec3 vel;
-    float life;           // seconds
+    float life;         // seconds
 };
 
-std::vector<Enemy> enemies;        // active enemy planes
+std::vector<Enemy> enemies;       // active enemy planes
 std::vector<Projectile> projectiles; // active bullets
 
 float enemySpawnTimer = 0.0f;
 float enemySpawnInterval = 6.0f;   // seconds between spawns (tune)
-int   maxEnemies = 12;             // cap number of enemies
+int   maxEnemies = 12;           // cap number of enemies
 
 int lastMouseLeftState = GLFW_RELEASE; // to detect click -> on press
 
@@ -148,8 +148,8 @@ int main() {
     Model pierModel("../src/Models/casa_city_logo.glb");
     std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/colombian_emb_314_tucano.glb");
-    Model sunModel("../src/Models/sphere.obj");          // visual sphere used for sun / debug marker
-    Model bulletModel("../src/Models/bullet.glb");      // projectile model (put bullet.glb here)
+    Model sunModel("../src/Models/sphere.obj");       // visual sphere used for sun / debug marker
+    Model bulletModel("../src/Models/bullet.glb");     // projectile model (put bullet.glb here)
 
     // Define a light source position in world space
     glm::vec3 lightPos;
@@ -213,7 +213,7 @@ int main() {
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
         
-        ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);    // A very dark, subtle sky blue
+        ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);   // A very dark, subtle sky blue
         ourShader.setVec3("groundColor", 0.03f, 0.03f, 0.03f); // A very dark, neutral gray for city reflections
 
         // Set view/projection matrices (same for all objects)
@@ -354,7 +354,7 @@ int main() {
 
             // offsets in *model* space (tune these so bullets come from wings)
             float forwardOffset = 4.0f;   // forward from plane pivot
-            float wingOffset = 2.0f;      // left/right wing offset
+            float wingOffset = 8.0f;      // FIX 1: Increased value for wider bullet spread
             float verticalOffset = -0.5f; // small downward offset so not inside model
 
             // spawn two bullets: left (-1) and right (+1)
@@ -386,35 +386,22 @@ int main() {
                 ourShader.setMat4("view", view);
                 ourShader.setInt("unlit", 1); // preserve the model's albedo / baked colours
 
-                // build orientation so model forward (0,0,1) aligns with velocity direction
+                // build orientation so model forward aligns with velocity direction
                 glm::vec3 dir = glm::normalize(p.vel);
                 if (glm::length(dir) < 1e-6f) dir = glm::vec3(0.0f, 0.0f, 1.0f);
 
-                // robust quaternion from 'from' to 'to' without requiring gtx/rotation
-                glm::vec3 from = glm::vec3(0.0f, 0.0f, 1.0f);
-                glm::vec3 to = dir;
-                float dotp = glm::clamp(glm::dot(from, to), -1.0f, 1.0f);
-                glm::quat q;
-                if (dotp > 0.9999f) {
-                    q = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // identity
-                } else if (dotp < -0.9999f) {
-                    // 180 degree rotation around any orthogonal axis
-                    glm::vec3 axis = glm::cross(from, glm::vec3(0.0f, 1.0f, 0.0f));
-                    if (glm::length(axis) < 1e-6f) axis = glm::vec3(1.0f, 0.0f, 0.0f);
-                    axis = glm::normalize(axis);
-                    q = glm::angleAxis(glm::pi<float>(), axis);
-                } else {
-                    float angle = acos(dotp);
-                    glm::vec3 axis = glm::cross(from, to);
-                    axis = glm::normalize(axis);
-                    q = glm::angleAxis(angle, axis);
-                }
+                // FIX 2: Replace manual quaternion math with a robust "lookAt" method
+                // Create a rotation matrix that makes the bullet "look at" its direction of travel.
+                // glm::lookAt creates a view matrix (which aligns -Z forward). We invert it to get a model matrix.
+                glm::mat4 rot = glm::inverse(glm::lookAt(glm::vec3(0.0f), dir, glm::vec3(0.0f, 1.0f, 0.0f)));
 
-                glm::mat4 rot = glm::mat4_cast(q);
+                // The bullet model's nose is likely along its +Z axis, but lookAt aligns -Z.
+                // We apply a 180-degree rotation around the Y axis to flip it around.
+                rot = rot * glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
                 glm::mat4 projModel = glm::mat4(1.0f);
                 projModel = glm::translate(projModel, p.pos);
-                projModel = projModel * rot;                      // orient to flight direction
+                projModel = projModel * rot;                         // orient to flight direction
                 projModel = glm::scale(projModel, glm::vec3(bulletScale)); // controlled size
 
                 ourShader.setMat4("model", projModel);
@@ -572,8 +559,8 @@ int main() {
         ourShader.use();
         // --------------------------------------------------------
         // 9. Update propeller angle for rotation
-        const float idlePropellerSpeed = 60.0f;       // The propeller's minimum spin speed (degrees per second)
-        const float propellerSpeedMultiplier = 9.0f;  // How much faster the propeller spins per m/s of plane speed
+        const float idlePropellerSpeed = 60.0f;      // The propeller's minimum spin speed (degrees per second)
+        const float propellerSpeedMultiplier = 9.0f; // How much faster the propeller spins per m/s of plane speed
 
         // Calculate the total rotation speed for this frame
         float currentPropellerSpeed = idlePropellerSpeed + (planeSpeed * propellerSpeedMultiplier);
