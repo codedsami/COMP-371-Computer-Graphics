@@ -34,8 +34,11 @@ glm::vec3 planePos( 0.0f, 550.0f,  50.0f ); // Starting position of the plane
 float planeSpeed = 10.0f;
 const float turnSpeed = 35.0f;
 glm::quat planeOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity quaternion
+
+
 float propellerAngle = 0.0f;
 float rudderAngle = 0.0f;
+float flapAngle = 0.0f;
 
 
 // Initialize the camera to target the plane's starting position ---
@@ -313,6 +316,28 @@ int main() {
         // Clamp the rudderAngle to its maximum limits.
         rudderAngle = glm::clamp(rudderAngle, -maxRudderAngle, maxRudderAngle);
 
+        // FLAPSSSSSSSSS
+        const float maxFlapAngle = 40.0f;   // Max deployment angle in degrees.
+        const float minFlapAngle = -15.0f;  // Minimum retraction angle in degrees.
+        const float flapDeploySpeed = 80.0f;  // How fast the flaps move.
+
+        if (pitchAmount < 0) { // 'S' key is pressed, deploy flaps.
+            flapAngle += flapDeploySpeed * deltaTime;
+        } else if (pitchAmount > 0) { // 'W' key is pressed, retract flaps.
+            flapAngle -= flapDeploySpeed * deltaTime;
+        } else {
+            // If NO pitch key is pressed, smoothly retract the flaps to their default position.
+            if (flapAngle > 0.1f) {
+                flapAngle -= flapDeploySpeed * deltaTime;
+            } else if (flapAngle < -0.1f) {
+                flapAngle += flapDeploySpeed * deltaTime;
+            } else {
+                flapAngle = 0.0f;
+            }
+        }
+        // Clamp the flapAngle to its limits (0 = fully retracted, maxFlapAngle = fully deployed).
+        flapAngle = glm::clamp(flapAngle, minFlapAngle, maxFlapAngle);
+
         // 3. Create small rotation quaternions for this frame's input
         glm::quat pitchQuat = glm::angleAxis(glm::radians(pitchAmount), glm::vec3(1.0f, 0.0f, 0.0f));
         glm::quat yawQuat = glm::angleAxis(glm::radians(yawAmount), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -475,6 +500,28 @@ int main() {
                 // 4. The final local transformation for the rudder.
                 //    This moves the rudder to the origin, rotates it, then moves it back to its pivot.
                 partTransform = planeBaseTransform * translateToPivot * rudderRotation * translateToModelOrigin;
+            }
+            // --- NEW: Check for the Flaps ---
+            else if (mesh.name == "FlapR_Paint_0" || mesh.name == "FlapL_Paint_0")
+            {
+                // Define a separate pivot point (hinge) for each flap.
+                // You will need to TUNE these values to position them correctly on the wings.
+                glm::vec3 flapPivot; 
+                if (mesh.name == "FlapR_Paint_0") {
+                    flapPivot = glm::vec3(50.0f, 6.0f, 1.0f); // Right flap pivot (GUESS)
+                } else { // FlapL_Paint_0
+                    flapPivot = glm::vec3(-50.0f, 6.0f, 1.0f); // Left flap pivot (GUESS)
+                }
+
+                // Create matrices to rotate around the specific pivot point.
+                glm::mat4 translateToPivot = glm::translate(glm::mat4(1.0f), flapPivot);
+                glm::mat4 translateToModelOrigin = glm::translate(glm::mat4(1.0f), -flapPivot);
+
+                // Flaps pitch around the plane's local RIGHT/LEFT axis (the X-axis).
+                glm::mat4 flapRotation = glm::rotate(glm::mat4(1.0f), glm::radians(flapAngle), glm::vec3(1.0f, 0.0f, 0.0f));
+
+                // Combine the matrices to create the final local transformation.
+                partTransform = planeBaseTransform * translateToPivot * flapRotation * translateToModelOrigin;
             }
             else
             {
