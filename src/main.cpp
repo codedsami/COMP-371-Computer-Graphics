@@ -74,8 +74,16 @@ struct Projectile {
     float life;         // seconds
 };
 
+// NEW: Add a struct for explosions
+struct Explosion {
+    glm::vec3 pos;
+    float life = 0.0f;
+    float maxLife = 0.8f; // How long the explosion lasts in seconds
+};
+
 std::vector<Enemy> enemies;       // active enemy planes
 std::vector<Projectile> projectiles; // active bullets
+std::vector<Explosion> explosions; // NEW: active explosions
 
 float enemySpawnTimer = 0.0f;
 float enemySpawnInterval = 6.0f;   // seconds between spawns (tune)
@@ -147,12 +155,13 @@ int main() {
     Shader ourShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
     Shader solidShader("../src/shaders/solid.vs", "../src/shaders/solid.fs"); //
 
-    // Load models: city, player plane, sun (visual), and bullet (projectile)
+    // Load models
     Model pierModel("../src/Models/casa_city_logo.glb");
     std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/colombian_emb_314_tucano.glb");
     Model sunModel("../src/Models/sphere.obj");       // visual sphere used for sun / debug marker
     Model bulletModel("../src/Models/bullet.glb");     // projectile model (put bullet.glb here)
+    Model explosionModel("../src/Models/explosion.glb"); // NEW: Load the explosion model
 
     // Define a light source position in world space
     glm::vec3 lightPos;
@@ -393,14 +402,12 @@ int main() {
                 glm::vec3 dir = glm::normalize(p.vel);
                 if (glm::length(dir) < 1e-6f) dir = glm::vec3(0.0f, 0.0f, 1.0f);
 
-                // FIX 2: Replace manual quaternion math with a robust "lookAt" method
                 // Create a rotation matrix that makes the bullet "look at" its direction of travel.
-                // glm::lookAt creates a view matrix (which aligns -Z forward). We invert it to get a model matrix.
                 glm::mat4 rot = glm::inverse(glm::lookAt(glm::vec3(0.0f), dir, glm::vec3(0.0f, 1.0f, 0.0f)));
 
-                // The bullet model's nose is likely along its +Z axis, but lookAt aligns -Z.
-                // We apply a 180-degree rotation around the Y axis to flip it around.
-                rot = rot * glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                // The bullet model's nose is along its -X axis. lookAt aligns -Z to the direction.
+                // We apply a -90-degree rotation around the Y axis to align the model's -X axis correctly.
+                rot = rot * glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
                 glm::mat4 projModel = glm::mat4(1.0f);
                 projModel = glm::translate(projModel, p.pos);
@@ -419,6 +426,12 @@ int main() {
                     float d = glm::length(projectiles[i].pos - enemies[j].pos);
                     const float hitThreshold = 8.0f; // tune
                     if (d < hitThreshold) {
+                        // --- NEW: Spawn explosion on hit ---
+                        Explosion ex;
+                        ex.pos = enemies[j].pos; // Spawn at the enemy's position
+                        explosions.push_back(ex);
+                        // --- End of new code ---
+                        
                         enemies.erase(enemies.begin() + j);
                         removeProj = true;
                         break;
@@ -429,6 +442,37 @@ int main() {
             if (removeProj) {
                 projectiles.erase(projectiles.begin() + i);
             }
+        }
+
+        // ------------------ UPDATE & DRAW EXPLOSIONS ------------------
+        for (int i = (int)explosions.size() - 1; i >= 0; --i) {
+            Explosion &ex = explosions[i];
+            ex.life += deltaTime; // update lifetime
+
+            if (ex.life >= ex.maxLife) {
+                // if lifetime is over, remove the explosion
+                explosions.erase(explosions.begin() + i);
+                continue;
+            }
+
+            ourShader.use();
+            ourShader.setMat4("projection", projection);
+            ourShader.setMat4("view", view);
+            ourShader.setInt("unlit", 1); // make it glow
+
+            // Calculate progress (0.0 to 1.0)
+            float progress = ex.life / ex.maxLife;
+            // A nice curve for scaling: starts small, grows fast, then fades
+            float currentScale = 25.0f * (4.0f * progress * (1.0f - progress));
+
+            glm::mat4 explosionModelMatrix = glm::mat4(1.0f);
+            explosionModelMatrix = glm::translate(explosionModelMatrix, ex.pos);
+            explosionModelMatrix = glm::scale(explosionModelMatrix, glm::vec3(currentScale));
+
+            ourShader.setMat4("model", explosionModelMatrix);
+            explosionModel.Draw(ourShader);
+
+            ourShader.setInt("unlit", 0); // reset for other models
         }
 
 
@@ -611,7 +655,7 @@ int main() {
         // std::cout << "-------------------------------------\n";
         // std::cout << "\n--- Verifying Plane Mesh Names ---" << std::endl;
         // for (size_t i = 0; i < planeModel.meshes.size(); ++i) {
-        //     std::cout << "Mesh at index " << i << " is named: '" << planeModel.meshes[i].name << "'" << std::endl;
+        //   std::cout << "Mesh at index " << i << " is named: '" << planeModel.meshes[i].name << "'" << std::endl;
         // }
         // std::cout << "-------------------------------------\n" << std::endl;
 
