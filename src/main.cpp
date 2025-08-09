@@ -16,6 +16,11 @@
 #include <iostream>
 #include <iomanip> // print speed on console
 
+// New includes for enemies/projectiles and RNG
+#include <vector>
+#include <random>
+#include <chrono>
+#include <cmath>   // acos, sqrt, etc
 
 // Function Prototypes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -50,6 +55,40 @@ float lastFrame = 0.0f;
 
  // Tracking  Previous Plane Position to Calculate Direction
 glm::vec3 lastPlanePos = planePos;
+
+
+// ------------------ Enemy / Projectile system ------------------
+struct Enemy {
+    glm::vec3 pos;
+    glm::vec3 target;   // where it's currently heading
+    float speed;
+    float yaw;          // orientation (radians)
+};
+
+struct Projectile {
+    glm::vec3 pos;
+    glm::vec3 vel;
+    float life;         // seconds
+};
+
+std::vector<Enemy> enemies;       // active enemy planes
+std::vector<Projectile> projectiles; // active bullets
+
+float enemySpawnTimer = 0.0f;
+float enemySpawnInterval = 6.0f;   // seconds between spawns (tune)
+int   maxEnemies = 12;           // cap number of enemies
+
+int lastMouseLeftState = GLFW_RELEASE; // to detect click -> on press
+
+// control projectile visual size (tweak)
+float bulletScale = 0.6f; // try 0.2 - 1.0 to adjust size
+
+// RNG for spawning
+std::mt19937 rng((unsigned)std::chrono::system_clock::now().time_since_epoch().count());
+std::uniform_real_distribution<float> uniformAngle(0.0f, 2.0f * 3.14159265f);
+std::uniform_real_distribution<float> uniformRadius(300.0f, 1200.0f); // spawn distance from center (tune)
+std::uniform_real_distribution<float> uniformSpeed(2.0f, 8.0f); // enemy speed range
+// ---------------------------------------------------------------
 
 // GLFW Error Callback
 void glfw_error_callback(int error, const char* description) {
@@ -105,19 +144,19 @@ int main() {
     Shader ourShader("../src/shaders/vertex.glsl", "../src/shaders/fragment.glsl");
     Shader solidShader("../src/shaders/solid.vs", "../src/shaders/solid.fs"); //
 
-    // Load 3 models
+    // Load models: city, player plane, sun (visual), and bullet (projectile)
     Model pierModel("../src/Models/casa_city_logo.glb");
     std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/colombian_emb_314_tucano.glb");
-    Model sunModel("../src/Models/sphere.obj");
-
+    Model sunModel("../src/Models/sphere.obj");       // visual sphere used for sun / debug marker
+    Model bulletModel("../src/Models/bullet.glb");     // projectile model (put bullet.glb here)
 
     // Define a light source position in world space
     glm::vec3 lightPos;
 
     // --- NEW: Apply initial correction rotations to the quaternion ---
-    planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // without this, the plane faces the wrong way, don't know why , but it just works....
-    planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, .0f, 0.0f));
+    planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // without this, the plane faces the wrong way , don't know why , but it just works....
+    // planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, .0f, 0.0f)); // sovled...... don't uncomment it back.
 
 
     // --- Shadow Mapping Setup ---
@@ -152,7 +191,6 @@ int main() {
     ourShader.setInt("texture_diffuse1", 0);
     ourShader.setInt("shadowMap", 1);
 
-
     // Main Render loop
     while (!glfwWindowShouldClose(window)) {
         // Per-frame time logic
@@ -175,19 +213,16 @@ int main() {
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
         
-        ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);    // A very dark, subtle sky blue
+        ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);   // A very dark, subtle sky blue
         ourShader.setVec3("groundColor", 0.03f, 0.03f, 0.03f); // A very dark, neutral gray for city reflections
-
 
         // Set view/projection matrices (same for all objects)
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 5000.0f);
         
-
         // Camera view matrix
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
-
 
         // ======== 1. RENDER DEPTH MAP (Shadow Pass) ========
         glm::mat4 lightProjection, lightView;
@@ -218,8 +253,6 @@ int main() {
         glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear again for the main pass
 
-
-
         // --- Animate the Sun and Draw the Scene ---
 
         // 1. Animate the light source (the sun) to orbit the city
@@ -230,7 +263,7 @@ int main() {
         lightPos.y = 1600.0f; // Keep the sun at a constant height, HEIGHT OF THE SUN
         lightPos.z = cos(glfwGetTime() * orbitSpeed) * orbitRadius;
 
-        // 2. Draw the Sun model (using the solid color shader)
+        // 2. Draw the Sun model (visual) using solid color shader (keeps it visible)
         solidShader.use();
         solidShader.setMat4("projection", projection);
         solidShader.setMat4("view", view);
@@ -243,7 +276,7 @@ int main() {
         modelMatrix = glm::translate(modelMatrix, lightPos);
         modelMatrix = glm::scale(modelMatrix, glm::vec3(25.0f));
         solidShader.setMat4("model", modelMatrix);
-        sunModel.Draw(solidShader);
+        sunModel.Draw(solidShader); // draw visual sun
 
         // 3. Draw the City/Pier and Plane (using the main texture shader)
         ourShader.use();
@@ -257,7 +290,7 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, depthMap);
 
         // Draw the City/Pier model
-         glActiveTexture(GL_TEXTURE0);
+        glActiveTexture(GL_TEXTURE0);
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));
         modelMatrix = glm::scale(modelMatrix, glm::vec3(2.0f, 2.0f, 2.0f));      
@@ -265,7 +298,137 @@ int main() {
         pierModel.Draw(ourShader);
 
 
-        
+        // ------------------ ENEMY SPAWN (timer) ------------------
+        enemySpawnTimer += deltaTime;
+        if (enemySpawnTimer >= enemySpawnInterval && (int)enemies.size() < maxEnemies) {
+            enemySpawnTimer = 0.0f;
+            float a = uniformAngle(rng);
+            float r = uniformRadius(rng);
+            Enemy e;
+            e.pos = glm::vec3(sin(a) * r, 500.0f, cos(a) * r); // spawn high
+            std::uniform_real_distribution<float> off(-150.0f, 150.0f);
+            e.target = glm::vec3(off(rng), 0.0f, off(rng));
+            e.speed = uniformSpeed(rng);
+            e.yaw = 0.0f;
+            enemies.push_back(e);
+        }
+
+        // ------------------ UPDATE & DRAW ENEMIES ------------------
+        for (auto &e : enemies) {
+            glm::vec3 toTarget = e.target - e.pos;
+            float dist = glm::length(toTarget);
+            glm::vec3 dir = (dist > 0.001f) ? glm::normalize(toTarget) : glm::vec3(0.0f);
+            e.pos += dir * e.speed * deltaTime;
+            if (dist < 20.0f) {
+                std::uniform_real_distribution<float> off(-300.0f, 300.0f);
+                e.target = glm::vec3(off(rng), 0.0f, off(rng));
+            }
+            if (glm::length(dir) > 0.001f) {
+                float yaw = atan2(dir.x, dir.z);
+                e.yaw = yaw;
+            }
+
+            // draw
+            glm::mat4 enemyModel = glm::mat4(1.0f);
+            enemyModel = glm::translate(enemyModel, e.pos);
+            // rotate so model faces heading (adjust sign if needed)
+            enemyModel = glm::rotate(enemyModel, -e.yaw, glm::vec3(0.0f, 1.0f, 0.0f));
+            enemyModel = glm::scale(enemyModel, glm::vec3(0.05f));
+            ourShader.setMat4("model", enemyModel);
+            planeModel.Draw(ourShader);
+        }
+
+        // ------------------ SHOOTING (left mouse press) ------------------
+        int curLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+        if (curLeft == GLFW_PRESS && lastMouseLeftState == GLFW_RELEASE) {
+            std::cout << "DEBUG: Fire! projectiles currently: " << projectiles.size() << std::endl;
+
+            float bulletSpeed = 200.0f; // tune
+            glm::vec3 localForward(0.0f, 0.0f, 1.0f);
+            glm::vec3 localUp(0.0f, 1.0f, 0.0f);
+            glm::vec3 localRight(1.0f, 0.0f, 0.0f);
+
+            glm::vec3 planeForward = planeOrientation * localForward;
+            glm::vec3 planeUp = planeOrientation * localUp;
+            glm::vec3 planeRight = planeOrientation * localRight;
+
+            // offsets in *model* space (tune these so bullets come from wings)
+            float forwardOffset = 4.0f;   // forward from plane pivot
+            float wingOffset = 8.0f;      // FIX 1: Increased value for wider bullet spread
+            float verticalOffset = -0.5f; // small downward offset so not inside model
+
+            // spawn two bullets: left (-1) and right (+1)
+            for (int sign = -1; sign <= 1; sign += 2) {
+                Projectile p;
+                p.pos = planePos
+                    + planeForward * forwardOffset
+                    + planeRight * (sign * wingOffset)
+                    + planeUp * verticalOffset;
+                p.vel = planeForward * bulletSpeed;
+                p.life = 6.0f;
+                projectiles.push_back(p);
+            }
+        }
+        lastMouseLeftState = curLeft;
+
+
+        // ------------------ UPDATE & DRAW PROJECTILES ------------------
+        for (int i = (int)projectiles.size() - 1; i >= 0; --i) {
+            Projectile &p = projectiles[i];
+            p.pos += p.vel * deltaTime;
+            p.life -= deltaTime;
+            bool removeProj = (p.life <= 0.0f);
+
+            if (!removeProj) {
+                // Draw projectile using the main textured shader so the GLB's original material shows.
+                ourShader.use();
+                ourShader.setMat4("projection", projection);
+                ourShader.setMat4("view", view);
+                ourShader.setInt("unlit", 1); // preserve the model's albedo / baked colours
+
+                // build orientation so model forward aligns with velocity direction
+                glm::vec3 dir = glm::normalize(p.vel);
+                if (glm::length(dir) < 1e-6f) dir = glm::vec3(0.0f, 0.0f, 1.0f);
+
+                // FIX 2: Replace manual quaternion math with a robust "lookAt" method
+                // Create a rotation matrix that makes the bullet "look at" its direction of travel.
+                // glm::lookAt creates a view matrix (which aligns -Z forward). We invert it to get a model matrix.
+                glm::mat4 rot = glm::inverse(glm::lookAt(glm::vec3(0.0f), dir, glm::vec3(0.0f, 1.0f, 0.0f)));
+
+                // The bullet model's nose is likely along its +Z axis, but lookAt aligns -Z.
+                // We apply a 180-degree rotation around the Y axis to flip it around.
+                rot = rot * glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+                glm::mat4 projModel = glm::mat4(1.0f);
+                projModel = glm::translate(projModel, p.pos);
+                projModel = projModel * rot;                         // orient to flight direction
+                projModel = glm::scale(projModel, glm::vec3(bulletScale)); // controlled size
+
+                ourShader.setMat4("model", projModel);
+                bulletModel.Draw(ourShader);
+
+                ourShader.setInt("unlit", 0); // reset
+            }
+
+            // Check collision with enemies (simple distance test)
+            if (!removeProj) {
+                for (int j = (int)enemies.size() - 1; j >= 0; --j) {
+                    float d = glm::length(projectiles[i].pos - enemies[j].pos);
+                    const float hitThreshold = 8.0f; // tune
+                    if (d < hitThreshold) {
+                        enemies.erase(enemies.begin() + j);
+                        removeProj = true;
+                        break;
+                    }
+                }
+            }
+
+            if (removeProj) {
+                projectiles.erase(projectiles.begin() + i);
+            }
+        }
+
+
         // --- FINALIZED PLANE LOGIC (with Quaternions) ---
 
         // 1. Control speed with keyboard
@@ -359,7 +522,6 @@ int main() {
             glm::vec3 realMin = glm::min(worldMin, worldMax);
             glm::vec3 realMax = glm::max(worldMin, worldMax);
 
-            // --- NEW DEBUG: Print the size of any very large mesh ---
             glm::vec3 boxSize = realMax - realMin;
             if (boxSize.y > 20.0f) { // Only print for objects taller than 20 units
                 // std::cout << "DEBUG::: " << "Found a very large mesh! Size: Y = " << boxSize.y << std::endl;
@@ -369,6 +531,8 @@ int main() {
                 collisionDetected = true;
                 break; // A collision was found, no need to check other meshes
             }
+
+            
         }
 
 
@@ -381,40 +545,29 @@ int main() {
 
 
         // --- CAMERA TARGET FIX ---
-        // This vector defines the offset from the model's pivot point (planePos)
-        // to the visual center of the plane's body.
-        // EXPERIMENT WITH THESE VALUES to move the green ball.
         glm::vec3 modelCenterOffset(0.0f, 9.0f, 3.5f); 
-
-        // Calculate the true visual center in world space by rotating the offset
-        // by the plane's current orientation.
         glm::vec3 visualCenter = planePos + (planeOrientation * modelCenterOffset);
-
-        // Tell the camera to look at this new, correct center point.
-        // The green ball will now be drawn at this position.
         camera.Target = visualCenter;
 
+        // Draw a small green marker at camera.Target using sunModel (keeps sunModel in the project)
         solidShader.use();
         solidShader.setMat4("projection", projection);
         solidShader.setMat4("view", view);
         solidShader.setVec3("objectColor", 0.0f, 1.0f, 0.0f); // Bright Green
 
-        // Create a model matrix to place the sphere exactly where the camera is looking
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, camera.Target);
         modelMatrix = glm::scale(modelMatrix, glm::vec3(0.5f)); // Make it small
         solidShader.setMat4("model", modelMatrix);
         
-        sunModel.Draw(solidShader); // Draw the green sphere
+        sunModel.Draw(solidShader); // Draw the green marker with the sphere model
         
         // Switch back to the main shader for the plane
         ourShader.use();
         // --------------------------------------------------------
-        
-
         // 9. Update propeller angle for rotation
-        const float idlePropellerSpeed = 60.0f;       // The propeller's minimum spin speed (degrees per second)
-        const float propellerSpeedMultiplier = 9.0f;  // How much faster the propeller spins per m/s of plane speed
+        const float idlePropellerSpeed = 60.0f;      // The propeller's minimum spin speed (degrees per second)
+        const float propellerSpeedMultiplier = 9.0f; // How much faster the propeller spins per m/s of plane speed
 
         // Calculate the total rotation speed for this frame
         float currentPropellerSpeed = idlePropellerSpeed + (planeSpeed * propellerSpeedMultiplier);
@@ -462,7 +615,6 @@ int main() {
             else if (mesh.name == "Rudder_Paint_0")
             {
                 // 1. Define the rudder's pivot point (its hinge) in the plane's local space.
-                //    You will need to TUNE these X, Y, and Z values!
                 glm::vec3 rudderPivot(0.0f, 0.85f, -23.0f); 
 
                 // 2. Create matrices to perform a rotation around this specific pivot point.
@@ -473,7 +625,6 @@ int main() {
                 glm::mat4 rudderRotation = glm::rotate(glm::mat4(1.0f), glm::radians(rudderAngle), glm::vec3(0.0f, 1.0f, 0.0f));
 
                 // 4. The final local transformation for the rudder.
-                //    This moves the rudder to the origin, rotates it, then moves it back to its pivot.
                 partTransform = planeBaseTransform * translateToPivot * rudderRotation * translateToModelOrigin;
             }
             else
@@ -483,7 +634,6 @@ int main() {
             }
 
             // 12. Apply final scaling and draw the mesh.
-            // NOTE: You may need to adjust the scale factor for this new model.
             glm::mat4 finalModelMatrix = glm::scale(partTransform, glm::vec3(0.05f));
             ourShader.setMat4("model", finalModelMatrix);
             mesh.Draw(ourShader);
@@ -515,7 +665,7 @@ void processInput(GLFWwindow *window) {
 }
 
 // Callback for when the window is resized
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+void framebuffer_size_callback(GLFWwindow*window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
