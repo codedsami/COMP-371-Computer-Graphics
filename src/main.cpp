@@ -7,7 +7,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/gtc/quaternion.hpp> // for quaternion helpers
+#include <glm/gtc/quaternion.hpp> // for rotation against plane's axis...
 
 #include "Shader.h"
 #include "Camera.h"
@@ -155,8 +155,8 @@ int main() {
     glm::vec3 lightPos;
 
     // --- NEW: Apply initial correction rotations to the quaternion ---
-    planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // without this, the plane faces the wrong way
-    planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, .0f, 0.0f));
+    planeOrientation = glm::rotate(planeOrientation, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // without this, the plane faces the wrong way , don't know why , but it just works....
+    // planeOrientation = glm::rotate(planeOrientation, glm::radians(-90.0f), glm::vec3(1.0f, .0f, 0.0f)); // sovled...... don't uncomment it back.
 
 
     // --- Shadow Mapping Setup ---
@@ -260,7 +260,7 @@ int main() {
         float orbitRadius = 400.0f;
         float orbitSpeed = 0.015f;
         lightPos.x = sin(glfwGetTime() * orbitSpeed) * orbitRadius;
-        lightPos.y = 1600.0f; // Keep the sun at a constant height
+        lightPos.y = 1600.0f; // Keep the sun at a constant height, HEIGHT OF THE SUN
         lightPos.z = cos(glfwGetTime() * orbitSpeed) * orbitRadius;
 
         // 2. Draw the Sun model (visual) using solid color shader (keeps it visible)
@@ -522,10 +522,17 @@ int main() {
             glm::vec3 realMin = glm::min(worldMin, worldMax);
             glm::vec3 realMax = glm::max(worldMin, worldMax);
 
+            glm::vec3 boxSize = realMax - realMin;
+            if (boxSize.y > 20.0f) { // Only print for objects taller than 20 units
+                // std::cout << "DEBUG::: " << "Found a very large mesh! Size: Y = " << boxSize.y << std::endl;
+            }
+
             if (CheckCollision(nextPlanePos, planeRadius, realMin, realMax)) {
                 collisionDetected = true;
                 break; // A collision was found, no need to check other meshes
             }
+
+            
         }
 
 
@@ -573,6 +580,15 @@ int main() {
 
         // 10. Define the plane's base transformation for the current frame
         glm::mat4 planeBaseTransform = glm::translate(glm::mat4(1.0f), planePos) * glm::mat4_cast(planeOrientation);
+
+
+        // // MESH NAMES OF THE PLANE MODEL
+        // std::cout << "-------------------------------------\n";
+        // std::cout << "\n--- Verifying Plane Mesh Names ---" << std::endl;
+        // for (size_t i = 0; i < planeModel.meshes.size(); ++i) {
+        //     std::cout << "Mesh at index " << i << " is named: '" << planeModel.meshes[i].name << "'" << std::endl;
+        // }
+        // std::cout << "-------------------------------------\n" << std::endl;
 
 
         // 11. Draw each part of the model with its correct transformation
