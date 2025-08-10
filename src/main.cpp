@@ -52,6 +52,9 @@ float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 
+bool planeLightOn = false;
+
+
 // Timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -210,6 +213,14 @@ int main() {
 
         // Activate shader
         ourShader.use();
+
+        // Direction the plane is facing
+        glm::vec3 planeDir = glm::normalize(planePos - lastPlanePos);
+
+        ourShader.setBool("planeLightOn", planeLightOn);
+        ourShader.setVec3("planeLightPos", planePos + glm::vec3(0.0f, -0.1f, 0.0f)); // Slightly under plane
+        ourShader.setVec3("planeLightDir", planeDir);
+
 
         // Set uniforms that are the same for all objects
         ourShader.setVec3("lightPos", lightPos);
@@ -708,6 +719,18 @@ int main() {
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    
+    static bool lKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+        if (!lKeyPressed) {
+            planeLightOn = !planeLightOn;
+            lKeyPressed = true;
+        }
+    } else {
+        lKeyPressed = false;
+    }
+
 
 }
 
