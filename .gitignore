@@ -10,6 +10,9 @@
 *.so
 *.dylib
 
+# Exception: Allow specific .obj files
+!src/Models/sphere.obj
+
 # Ignore editor/IDE files (optional, depends on what you use)
 .vscode/
 .idea/
