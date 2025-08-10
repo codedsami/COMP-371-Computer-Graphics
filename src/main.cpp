@@ -406,8 +406,8 @@ int main() {
                 glm::mat4 rot = glm::inverse(glm::lookAt(glm::vec3(0.0f), dir, glm::vec3(0.0f, 1.0f, 0.0f)));
 
                 // The bullet model's nose is along its -X axis. lookAt aligns -Z to the direction.
-                // We apply a -90-degree rotation around the Y axis to align the model's -X axis correctly.
-                rot = rot * glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                // We apply a 90-degree rotation around the Y axis to align the model's -X axis correctly.
+                rot = rot * glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
                 glm::mat4 projModel = glm::mat4(1.0f);
                 projModel = glm::translate(projModel, p.pos);
