@@ -77,6 +77,14 @@ struct Projectile {
     float life;         // seconds
 };
 
+struct Explosion {
+    glm::vec3 pos;
+    float life;
+    float scale;
+};
+
+std::vector<Explosion> explosions; // active explosions
+
 std::vector<Enemy> enemies;       // active enemy planes
 std::vector<Projectile> projectiles; // active bullets
 
@@ -156,6 +164,7 @@ int main() {
     Model planeModel("../src/Models/plane/colombian_emb_314_tucano.glb");
     Model sunModel("../src/Models/sphere.obj");       // visual sphere used for sun / debug marker
     Model bulletModel("../src/Models/bullet.glb");     // projectile model (put bullet.glb here)
+    Model explosionModel("../src/Models/explosion.glb");
 
     // Define a light source position in world space
     glm::vec3 lightPos;
@@ -430,16 +439,51 @@ int main() {
                     float d = glm::length(projectiles[i].pos - enemies[j].pos);
                     const float hitThreshold = 8.0f; // tune
                     if (d < hitThreshold) {
+                        // CREATE EXPLOSION AT ENEMY POSITION
+                        Explosion exp;
+                        exp.pos = enemies[j].pos;
+                        exp.life = 1.5f; // explosion lasts 2 seconds
+                        exp.scale = 0.1f; // start small
+                        explosions.push_back(exp);
+                        
+                        std::cout << "BOOM! Enemy destroyed!\n";
+                        
                         enemies.erase(enemies.begin() + j);
                         removeProj = true;
                         break;
                     }
                 }
             }
-
             if (removeProj) {
                 projectiles.erase(projectiles.begin() + i);
             }
+        }
+
+        // ------------------ UPDATE & DRAW EXPLOSIONS ------------------
+        for (int i = (int)explosions.size() - 1; i >= 0; --i) {
+            Explosion &exp = explosions[i];
+            exp.life -= deltaTime;
+            exp.scale += 3.0f * deltaTime; // explosion grows over time
+            
+            if (exp.life <= 0.0f) {
+                explosions.erase(explosions.begin() + i);
+                continue;
+            }
+            
+            // Draw explosion
+            ourShader.use();
+            ourShader.setMat4("projection", projection);
+            ourShader.setMat4("view", view);
+            ourShader.setInt("unlit", 1); // make it bright/unlit
+            
+            glm::mat4 expModel = glm::mat4(1.0f);
+            expModel = glm::translate(expModel, exp.pos);
+            expModel = glm::scale(expModel, glm::vec3(exp.scale));
+            
+            ourShader.setMat4("model", expModel);
+            explosionModel.Draw(ourShader);
+            
+            ourShader.setInt("unlit", 0); // reset unlit flag
         }
 
 
