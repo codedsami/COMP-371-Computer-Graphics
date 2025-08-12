@@ -89,7 +89,7 @@ std::vector<Projectile> projectiles; // active bullets
 
 float enemySpawnTimer = 0.0f;
 float enemySpawnInterval = 6.0f;   // seconds between spawns (tune)
-int   maxEnemies = 12;           // cap number of enemies
+const int   maxEnemies = 12;           // cap number of enemies
 
 int lastMouseLeftState = GLFW_RELEASE; // to detect click -> on press
 

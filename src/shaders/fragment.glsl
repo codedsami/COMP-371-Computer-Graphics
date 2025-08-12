@@ -10,6 +10,13 @@ uniform vec3 lightPos;
 uniform vec3 viewPos;
 uniform vec3 lightColor;
 
+
+uniform bool planeLightOn;
+uniform vec3 planeLightPos;
+uniform vec3 planeLightDir;
+
+
+
 // --- NEW: Hemisphere lighting uniforms ---
 uniform vec3 skyColor; // which is sky blue for now
 uniform vec3 groundColor; // a bit browny this time
@@ -67,10 +74,13 @@ void main()
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * lightColor * diffuseStrength;
 
+
     // --- APPLY THE SHADOW ---
     float shadow = CalculateShadow(FragPosLightSpace); // <-- ADD THIS
     
     // Combine lighting: The shadow only affects the direct (diffuse) light, not the ambient light.
     vec3 result = (ambient + (1.0 - shadow) * diffuse) * objectColor; // <-- MODIFY THIS
+
+
     FragColor = vec4(result, 1.0);
 }
