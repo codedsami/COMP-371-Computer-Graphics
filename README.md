@@ -23,7 +23,7 @@ This project was developed as part of **COMP-371 Computer Graphics** course at C
 - **Mouse**: Camera orbit and zoom (third-person orbit camera)
 - **W/S**: Pitch control with animated flap deployment
 - **A/D**: Yaw control with animated rudder movement
-- **Space**: Fire projectiles from wing-mounted positions
+- **Mouse Left Click**: Fire projectiles from wing-mounted positions
 - **Mouse Wheel**: Camera zoom
 - **Shift/Ctrl**: Speed control (accelerate/decelerate)
 
@@ -185,3 +185,4 @@ This project is developed for educational purposes as part of COMP-371 Computer 
 <p align="center">
   <i>Built with ❤️ for COMP-371 Computer Graphics - Concordia University</i>
 </p>
+
