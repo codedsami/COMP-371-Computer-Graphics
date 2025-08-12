@@ -144,6 +144,7 @@ Animation hierarchy structure:
 - **Aircraft**: [Colombian EMB-314 Tucano](https://sketchfab.com/3d-models/colombian-emb-314-tucano-985512d205e6417b981fc009c8ded388) by [42manako](https://sketchfab.com/42manako)
 - **Missile**: [AIM-120C AMRAAM](https://sketchfab.com/3d-models/aim-120c-amraam-62b79b0f76e44684ad43adcc2ae3cdb9) by [Planetrix23](https://sketchfab.com/Planetrix23)
 - **Sun Model**: Sphere from [MIT WebLogo](https://web.mit.edu/djwendel/www/weblogo/shapes/basic-shapes/sphere/sphere.obj)
+- **Exploision** : [Explosion](https://sketchfab.com/3d-models/explosion-46fb54741fbc4cc0854c03b5ef5d0624#download) by [andersdt](https://sketchfab.com/andersdt)
 
 ## 📈 Performance Optimization
 

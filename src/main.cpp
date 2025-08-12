@@ -67,6 +67,7 @@ struct Enemy {
     glm::vec3 target;   // where it's currently heading
     float speed;
     float yaw;          // orientation (radians)
+    float propellerAngle = 0.0f;
 };
 
 struct Projectile {
@@ -101,7 +102,7 @@ float bulletScale = 0.6f; // try 0.2 - 1.0 to adjust size
 std::mt19937 rng((unsigned)std::chrono::system_clock::now().time_since_epoch().count());
 std::uniform_real_distribution<float> uniformAngle(0.0f, 2.0f * 3.14159265f);
 std::uniform_real_distribution<float> uniformRadius(300.0f, 1200.0f); // spawn distance from center (tune)
-std::uniform_real_distribution<float> uniformSpeed(2.0f, 8.0f); // enemy speed range
+std::uniform_real_distribution<float> uniformSpeed(35.0f, 40.0f); // enemy speed range
 // ---------------------------------------------------------------
 
 // GLFW Error Callback
@@ -162,6 +163,7 @@ int main() {
     Model pierModel("../src/Models/casa_city_logo.glb");
     std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/colombian_emb_314_tucano.glb");
+    Model enemyModel("../src/Models/plane/colombian_emb_314_tucano.glb");
     Model sunModel("../src/Models/sphere.obj");             // visual sphere used for sun / debug marker
     Model bulletModel("../src/Models/bullet.glb");          // projectile model
     Model explosionModel("../src/Models/explosion.glb");    // explosion model
@@ -339,26 +341,70 @@ int main() {
         // ------------------ UPDATE & DRAW ENEMIES ------------------
         for (auto &e : enemies) {
             glm::vec3 toTarget = e.target - e.pos;
+            toTarget.y = 0.0f; 
             float dist = glm::length(toTarget);
             glm::vec3 dir = (dist > 0.001f) ? glm::normalize(toTarget) : glm::vec3(0.0f);
+            
+            // This line correctly moves the enemy
             e.pos += dir * e.speed * deltaTime;
+
+            // Pick a new target when the old one is reached
             if (dist < 20.0f) {
                 std::uniform_real_distribution<float> off(-300.0f, 300.0f);
-                e.target = glm::vec3(off(rng), 0.0f, off(rng));
-            }
-            if (glm::length(dir) > 0.001f) {
-                float yaw = atan2(dir.x, dir.z);
-                e.yaw = yaw;
+                e.target = glm::vec3(off(rng), 400.0f, off(rng)); // Target points at a lower altitude
             }
 
-            // draw
-            glm::mat4 enemyModel = glm::mat4(1.0f);
-            enemyModel = glm::translate(enemyModel, e.pos);
-            // rotate so model faces heading (adjust sign if needed)
-            enemyModel = glm::rotate(enemyModel, -e.yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-            enemyModel = glm::scale(enemyModel, glm::vec3(0.05f));
-            ourShader.setMat4("model", enemyModel);
-            planeModel.Draw(ourShader);
+            // Update yaw for orientation
+            if (glm::length(dir) > 0.001f) {
+                e.yaw = atan2(dir.x, dir.z);
+            }
+
+            // --- ADD THIS BLOCK to update the enemy's propeller angle ---
+            const float idlePropellerSpeed = 600.0f;
+            const float propellerSpeedMultiplier = 90.0f;
+            float currentPropellerSpeed = idlePropellerSpeed + (e.speed * propellerSpeedMultiplier);
+            e.propellerAngle += currentPropellerSpeed * deltaTime;
+            if (e.propellerAngle >= 360.0f){
+                e.propellerAngle -= 360.0f;
+            }
+        }
+        
+        // ------------------ DRAW ENEMIES ------------------
+        for (auto &e : enemies) {
+            glm::mat4 enemyBaseTransform = glm::translate(glm::mat4(1.0f), e.pos);
+            enemyBaseTransform *= glm::rotate(glm::mat4(1.0f), e.yaw, glm::vec3(0.0f, 1.0f, 0.0f));
+            
+            // 2. Apply the crucial 180-degree rotation to fix the backwards movement.
+            enemyBaseTransform *= glm::rotate(glm::mat4(1.0f), glm::radians(00.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+            // 3. Draw each part of the enemy model, animating the propeller.
+            for (Mesh &mesh : enemyModel.meshes)
+            {
+                glm::mat4 partTransform;
+
+                if (mesh.name == "Propeller_Paint_0")
+                {
+                    // Use the same offset and pivot logic as the player's propeller.
+                    glm::vec3 propellerOffset(0.0f, -0.1f, 1.75f);
+                    glm::mat4 propellerTranslate = glm::translate(glm::mat4(1.0f), propellerOffset);
+                    glm::vec3 pivotCorrectionOffset(0.0f, 7.75f, 1.75f);
+                    glm::mat4 translateToOrigin = glm::translate(glm::mat4(1.0f), -pivotCorrectionOffset);
+                    glm::mat4 propellerSpin = glm::rotate(glm::mat4(1.0f), glm::radians(e.propellerAngle), glm::vec3(0.0f, 0.0f, 1.0f));
+                    glm::mat4 translateBack = glm::translate(glm::mat4(1.0f), pivotCorrectionOffset);
+                    glm::mat4 correctedSpin = translateBack * propellerSpin * translateToOrigin;
+                    partTransform = enemyBaseTransform * propellerTranslate * correctedSpin;
+                }
+                else
+                {
+                    // It's the enemy plane's body, so just use the base transform.
+                    partTransform = enemyBaseTransform;
+                }
+
+                // Apply final scaling and draw the mesh.
+                glm::mat4 finalModelMatrix = glm::scale(partTransform, glm::vec3(0.05f));
+                ourShader.setMat4("model", finalModelMatrix);
+                mesh.Draw(ourShader);
+            }
         }
 
         // ------------------ SHOOTING (left mouse press) ------------------
@@ -470,7 +516,7 @@ int main() {
             // equation : sin(0) = 0, sin(pi/2) = 1, sin(pi) = 0
             float puffScale = sin(progress * 3.14159f);
 
-            const float maxExplosionScale = 0.30f;
+            const float maxExplosionScale = 10.30f;
 
             ourShader.use();
             ourShader.setMat4("projection", projection);
@@ -764,6 +810,7 @@ void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
     
+    // Handle Day and night.
     static bool nKeyPressed = false;
     if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) {
         if (!nKeyPressed) {
