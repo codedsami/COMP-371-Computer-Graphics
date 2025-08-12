@@ -52,11 +52,6 @@ float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 
-bool planeLightOn = false;
-bool isNightMode = false;
-
-
-
 // Timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -82,17 +77,19 @@ struct Projectile {
 struct Explosion {
     glm::vec3 pos;
     float life;
+    float totalLife;
     float scale;
 };
 
-std::vector<Explosion> explosions; // active explosions
 
+std::vector<Explosion> explosions; // active explosions
 std::vector<Enemy> enemies;       // active enemy planes
 std::vector<Projectile> projectiles; // active bullets
 
+
 float enemySpawnTimer = 0.0f;
 float enemySpawnInterval = 6.0f;   // seconds between spawns (tune)
-int   maxEnemies = 12;           // cap number of enemies
+const int   maxEnemies = 12;           // cap number of enemies
 
 int lastMouseLeftState = GLFW_RELEASE; // to detect click -> on press
 
@@ -164,9 +161,9 @@ int main() {
     Model pierModel("../src/Models/casa_city_logo.glb");
     std::cout << "DEBUG:::" << " City model has " << pierModel.meshes.size() << " meshes." << std::endl;
     Model planeModel("../src/Models/plane/colombian_emb_314_tucano.glb");
-    Model sunModel("../src/Models/sphere.obj");       // visual sphere used for sun / debug marker
-    Model bulletModel("../src/Models/bullet.glb");     // projectile model (put bullet.glb here)
-    Model explosionModel("../src/Models/explosion.glb");
+    Model sunModel("../src/Models/sphere.obj");             // visual sphere used for sun / debug marker
+    Model bulletModel("../src/Models/bullet.glb");          // projectile model
+    Model explosionModel("../src/Models/explosion.glb");    // explosion model
 
     // Define a light source position in world space
     glm::vec3 lightPos;
@@ -225,28 +222,13 @@ int main() {
         // Activate shader
         ourShader.use();
 
-        // Direction the plane is facing
-        glm::vec3 planeDir = glm::normalize(planePos - lastPlanePos);
-
-        ourShader.setBool("planeLightOn", planeLightOn);
-        ourShader.setVec3("planeLightPos", planePos + glm::vec3(0.0f, -0.1f, 0.0f)); // Slightly under plane
-        ourShader.setVec3("planeLightDir", planeDir);
-
-
         // Set uniforms that are the same for all objects
         ourShader.setVec3("lightPos", lightPos);
         ourShader.setVec3("viewPos", camera.Position);
-        if (isNightMode) {
-            ourShader.setVec3("lightColor", 0.4f, 0.4f, 0.6f); // soft moonlight
-            ourShader.setVec3("skyColor", 0.03f, 0.04f, 0.06f); // muted blue-gray sky
-            ourShader.setVec3("groundColor", 0.04f, 0.04f, 0.05f); // slightly brighter ground
-        } else {
-            ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f); // bright daylight
-            ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f); // normal sky
-            ourShader.setVec3("groundColor", 0.03f, 0.03f, 0.03f); // normal ground
-        }
-
-
+        ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+        
+        ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);   // A very dark, subtle sky blue
+        ourShader.setVec3("groundColor", 0.03f, 0.03f, 0.03f); // A very dark, neutral gray for city reflections
 
         // Set view/projection matrices (same for all objects)
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 5000.0f);
@@ -302,12 +284,7 @@ int main() {
         solidShader.setVec3("lightPos", lightPos); 
         solidShader.setVec3("viewPos", camera.Position);
         solidShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
-        if (isNightMode)
-            solidShader.setVec3("objectColor", 0.6f, 0.6f, 0.8f); // pale moonlight
-        else
-            solidShader.setVec3("objectColor", 1.0f, 1.0f, 0.0f); // bright yellow sun
-
-
+        solidShader.setVec3("objectColor", 1.0f, 1.0f, 0.0f); // Bright yellow for the sun
 
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, lightPos);
@@ -451,40 +428,41 @@ int main() {
             if (!removeProj) {
                 for (int j = (int)enemies.size() - 1; j >= 0; --j) {
                     float d = glm::length(projectiles[i].pos - enemies[j].pos);
-                    const float hitThreshold = 8.0f; // tune
+                    const float hitThreshold = 10.0f; // tune
                     if (d < hitThreshold) {
-                        // CREATE EXPLOSION AT ENEMY POSITION
                         Explosion exp;
                         exp.pos = enemies[j].pos;
-                        exp.life = 1.5f; // explosion lasts 2 seconds
-                        exp.scale = 0.1f; // start small
+                        exp.totalLife = 1.2f; // The total duration of the explosion in seconds
+                        exp.life = exp.totalLife; // Set the current life to the total
+                        exp.scale = 0.0f; // Start with zero scale
                         explosions.push_back(exp);
-                        
-                        std::cout << "BOOM! Enemy destroyed!\n";
-                        
                         enemies.erase(enemies.begin() + j);
                         removeProj = true;
                         break;
                     }
                 }
             }
+
             if (removeProj) {
                 projectiles.erase(projectiles.begin() + i);
             }
         }
-
         // ------------------ UPDATE & DRAW EXPLOSIONS ------------------
-        for (int i = (int)explosions.size() - 1; i >= 0; --i) {
+        for (int i = (int)explosions.size() - 1; i >= 0; i--) {
             Explosion &exp = explosions[i];
             exp.life -= deltaTime;
-            exp.scale += 3.0f * deltaTime; // explosion grows over time
             
             if (exp.life <= 0.0f) {
                 explosions.erase(explosions.begin() + i);
                 continue;
             }
             
-            // Draw explosion
+            float progress = 1.0f - (exp.life / exp.totalLife);
+            // equation : sin(0) = 0, sin(pi/2) = 1, sin(pi) = 0
+            float puffScale = sin(progress * 3.14159f);
+
+            const float maxExplosionScale = 0.30f;
+
             ourShader.use();
             ourShader.setMat4("projection", projection);
             ourShader.setMat4("view", view);
@@ -492,14 +470,13 @@ int main() {
             
             glm::mat4 expModel = glm::mat4(1.0f);
             expModel = glm::translate(expModel, exp.pos);
-            expModel = glm::scale(expModel, glm::vec3(exp.scale));
+            expModel = glm::scale(expModel, glm::vec3(puffScale * maxExplosionScale));
             
             ourShader.setMat4("model", expModel);
             explosionModel.Draw(ourShader);
             
             ourShader.setInt("unlit", 0); // reset unlit flag
         }
-
 
         // --- FINALIZED PLANE LOGIC (with Quaternions) ---
 
@@ -777,29 +754,6 @@ int main() {
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-
-    
-    static bool lKeyPressed = false;
-    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-        if (!lKeyPressed) {
-            planeLightOn = !planeLightOn;
-            lKeyPressed = true;
-        }
-    } else {
-        lKeyPressed = false;
-    }
-
-    static bool nKeyPressed = false;
-    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) {
-        if (!nKeyPressed) {
-            isNightMode = !isNightMode;
-            std::cout << "Night Mode: " << (isNightMode ? "ON" : "OFF") << std::endl;
-            nKeyPressed = true;
-        }
-    } else {
-        nKeyPressed = false;
-    }
-
 
 }
 
