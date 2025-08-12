@@ -101,7 +101,7 @@ float bulletScale = 0.6f; // 0.2 - 1.0 should be a good range for this size
 // RNG for spawning
 std::mt19937 rng((unsigned)std::chrono::system_clock::now().time_since_epoch().count());
 std::uniform_real_distribution<float> uniformAngle(0.0f, 2.0f * 3.14159265f);
-std::uniform_real_distribution<float> uniformRadius(300.0f, 1500.0f); // spawn distance from center (tune if necessary)
+std::uniform_real_distribution<float> uniformRadius(300.0f, 4000.0f); // spawn distance from center (tune if necessary)
 std::uniform_real_distribution<float> uniformSpeed(35.0f, 40.0f); // enemy speed range
 // ---------------------------------------------------------------
 
