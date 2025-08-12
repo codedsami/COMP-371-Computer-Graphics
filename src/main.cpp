@@ -51,6 +51,7 @@ Camera camera(planePos);
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
+bool isNightMode = false;
 
 // Timing
 float deltaTime = 0.0f;
@@ -225,10 +226,15 @@ int main() {
         // Set uniforms that are the same for all objects
         ourShader.setVec3("lightPos", lightPos);
         ourShader.setVec3("viewPos", camera.Position);
-        ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
-        
-        ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f);   // A very dark, subtle sky blue
-        ourShader.setVec3("groundColor", 0.03f, 0.03f, 0.03f); // A very dark, neutral gray for city reflections
+        if (isNightMode) {
+            ourShader.setVec3("lightColor", 0.4f, 0.4f, 0.6f); // soft moonlight
+            ourShader.setVec3("skyColor", 0.03f, 0.04f, 0.06f); // muted blue-gray sky
+            ourShader.setVec3("groundColor", 0.04f, 0.04f, 0.05f); // slightly brighter ground
+        } else {
+            ourShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f); // bright daylight
+            ourShader.setVec3("skyColor", 0.02f, 0.03f, 0.05f); // normal sky
+            ourShader.setVec3("groundColor", 0.03f, 0.03f, 0.03f); // normal ground
+        }
 
         // Set view/projection matrices (same for all objects)
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 5000.0f);
@@ -284,7 +290,10 @@ int main() {
         solidShader.setVec3("lightPos", lightPos); 
         solidShader.setVec3("viewPos", camera.Position);
         solidShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
-        solidShader.setVec3("objectColor", 1.0f, 1.0f, 0.0f); // Bright yellow for the sun
+        if (isNightMode)
+            solidShader.setVec3("objectColor", 0.6f, 0.6f, 0.8f); // pale moonlight
+        else
+            solidShader.setVec3("objectColor", 1.0f, 1.0f, 0.0f); // bright yellow sun
 
         modelMatrix = glm::mat4(1.0f);
         modelMatrix = glm::translate(modelMatrix, lightPos);
@@ -754,7 +763,17 @@ int main() {
 void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-
+    
+    static bool nKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) {
+        if (!nKeyPressed) {
+            isNightMode = !isNightMode;
+            std::cout << "Night Mode: " << (isNightMode ? "ON" : "OFF") << std::endl;
+            nKeyPressed = true;
+        }
+    } else {
+        nKeyPressed = false;
+    }
 }
 
 // Callback for when the window is resized
